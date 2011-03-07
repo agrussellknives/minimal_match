@@ -1,4 +1,4 @@
-Copyright (c) 2011 Stephen Prater (@dev-env)
+Copyright (c) 2011 A.G. Russell Knives 
 
 Permission is hereby granted, free of charge, to any person obtaining
 a copy of this software and associated documentation files (the
