@@ -97,7 +97,7 @@ describe "simple array matching" do
     mult_test = lambda do |f|
       ([1,2,3] =~ [1,Array::Anything * f])
     end
-    mult_test.call('berney').should_raise ArgumentError
+    lambda { mult_test.call('berney') }.should raise_error(ArgumentError)
     mult_test.call(2).should == true
   end  
 
