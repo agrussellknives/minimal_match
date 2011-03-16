@@ -9,20 +9,19 @@ module MinimalMatch
     end
 
     def find match 
-      #rewrite to use enumerator
-      @matches ||= @array
       expressions = []
-      class_look = lambda do |expression|
-        expressions << expression if match.is_like? expression
-        expression.each do |e| 
-          if e.is_a? Array
-            class_look.call(e)
+      @matches = Enumerator.new do |y|
+        class_look = lambda do |expression|
+          if match.is_like? expression
+            y.yield expression
+            if expression.is_a? Array
+              class_look.call(expression)
+            end
           end
         end
+        class_look.call(@array)
       end
-      class_look.call(@matches)
-      @matches = expressions
-      self
+      @matches
     end
 
     def pos
