@@ -1,43 +1,53 @@
+require 'delegate'
+
 module MinimalMatch
-  class MinimalSearch 
-    def initialize array 
-      raise ArgumentError, "I only know how to search Arrays not #{array.class}" unless array.kind_of? Array
+  module MinimalSearchMixin
+    def search match
+      MinimalMatch::MinimalSearch.new(self).find(match)
+    end
+  end
+
+  class MinimalSearch < SimpleDelegator 
+    def initialize array
+      begin 
+        @array = array.to_a
+      rescue TypeError => e
+        raise TypeError, "#{array.class} can't be converted to and array" 
+      end
+
       unless array.method(:=~).owner == MinimalMatch
         array.extend MinimalMatch
       end
       @array = array
+      super(Enumerator.new) # just blank for now
     end
 
     def find match 
-      expressions = []
-      @matches = Enumerator.new do |y|
+      @en = Enumerator.new do |y|
         class_look = lambda do |expression|
-          if match.is_like? expression
+          if expression =~ match
             y.yield expression
-            if expression.is_a? Array
-              class_look.call(expression)
+          end
+          expression.each do |subexp|
+            if subexp.method(:=~).owner == MinimalMatch
+              class_look.call(subexp)
             end
           end
         end
         class_look.call(@array)
       end
-      @matches
+      @en.singleton_class.send :define_method, :search do
+        match
+      end
+      __setobj__ @en
+      self 
     end
 
-    def pos
-      @matches
+    def inspect
+      "#<#{self.class} search: #{@en.search}>"
     end
 
-    def pos= old_exp
-      @matches = old_exp
-    end
-
-    def rewind
-      @matches = nil 
-    end
-
-    def to_a
-      @matches
-    end
   end
 end
+
+#  vim: set ts=2 sw=2 tw=0 :

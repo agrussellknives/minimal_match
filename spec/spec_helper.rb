@@ -14,3 +14,31 @@ end
 
 require 'simplecov'
 SimpleCov.start 
+
+
+# this is just data to test the search on.  sexps work great for this
+class Array
+  include MinimalMatch
+end
+
+class Dummy
+  include Enumerable
+  def foo
+    puts "bar"
+  end
+
+  def bar
+    puts "foo"
+  end
+end
+
+class Dumber
+  include Enumerable
+  def foo
+    puts "bar"
+  end
+
+  def baz
+    puts "foobile"
+  end
+end
