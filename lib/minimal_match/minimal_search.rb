@@ -3,27 +3,37 @@ require 'delegate'
 module MinimalMatch
   module MinimalSearchMixin
     def search match
-      MinimalMatch::MinimalSearch.new(self).find(match)
+      MinimalMatch::MinimalSearch.new(self, :autoextend).find(match)
     end
   end
 
   class MinimalSearch < SimpleDelegator 
-    def initialize array
+    
+    class SearchEnumerator < Enumerator
+      include MinimalSearchMixin
+      attr_accessor :search_term
+
+      def to_s 
+        "#<#{self.class}:0x#{'%x' % self.object_id << 1} search_term: #{@search_term}>"
+      end
+    end
+
+    def initialize array, autoextend=true
       begin 
         @array = array.to_a
       rescue TypeError => e
-        raise TypeError, "#{array.class} can't be converted to and array" 
+        raise TypeError, "#{array.class} can't be converted to an array"
       end
-
-      unless array.method(:=~).owner == MinimalMatch
-        array.extend MinimalMatch
+      @autoextend = autoextend ? true : false
+      unless @array.method(:=~).owner == MinimalMatch
+        @array.extend MinimalMatch
       end
-      @array = array
-      super(Enumerator.new) # just blank for now
+      @en = SearchEnumerator.new {}
+      super(@en) # just blank for nowi
     end
 
     def find match 
-      @en = Enumerator.new do |y|
+      @en = SearchEnumerator.new do |y|
         class_look = lambda do |expression|
           if expression =~ match
             y.yield expression
@@ -31,22 +41,27 @@ module MinimalMatch
           expression.each do |subexp|
             if subexp.method(:=~).owner == MinimalMatch
               class_look.call(subexp)
+            elsif @autoextend
+              if subexp.kind_of? Array
+                subexp.extend MinimalMatch
+                redo 
+              end
             end
           end
         end
         class_look.call(@array)
       end
-      @en.singleton_class.send :define_method, :search do
-        match
-      end
+      @en.search_term = match
       __setobj__ @en
-      self 
+    end
+
+    def to_s
+      "#<#{self.class}:0x#{'%x' % self.object_id << 1} array: #{@array}>"
     end
 
     def inspect
-      "#<#{self.class} search: #{@en.search}>"
+      to_s
     end
-
   end
 end
 

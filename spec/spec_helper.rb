@@ -17,8 +17,10 @@ SimpleCov.start
 
 
 # this is just data to test the search on.  sexps work great for this
+#
+# enable searches on arrays
 class Array
-  include MinimalMatch
+  include MinimalSearchMixin
 end
 
 class Dummy
