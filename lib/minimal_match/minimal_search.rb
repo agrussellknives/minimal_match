@@ -1,48 +1,68 @@
-module MinimalMatch
-  class MinimalSearch 
-    def initialize array
-      unless array.kind_of? Array
-        raise ArgumentError, "I only know how to search Arrays not #{array.class}" 
-      end
+require 'delegate'
 
-      # add the matchin facility to the array if necessary
-      unless array.method(:=~).owner == MinimalMatch
-        array.extend MinimalMatch
+module MinimalMatch
+  module MinimalSearchMixin
+    def search match
+      MinimalMatch::MinimalSearch.new(self, :autoextend).find(match)
+    end
+  end
+
+  class MinimalSearch < SimpleDelegator 
+    
+    class SearchEnumerator < Enumerator
+      include MinimalSearchMixin
+      attr_accessor :search_term
+
+      def to_s 
+        "#<#{self.class}:0x#{'%x' % self.object_id << 1} search_term: #{@search_term}>"
       end
-      @array = array
     end
 
-    def find match
-      # i imagine we can cache the enumerator here
-      #rewrite to use enumerator
-      @matches = Enumerator.new do |y| 
+    def initialize array, autoextend=true
+      begin 
+        @array = array.to_a
+      rescue TypeError => e
+        raise TypeError, "#{array.class} can't be converted to an array"
+      end
+      @autoextend = autoextend ? true : false
+      unless @array.method(:=~).owner == MinimalMatch
+        @array.extend MinimalMatch
+      end
+      @en = SearchEnumerator.new {}
+      super(@en) # just blank for nowi
+    end
+
+    def find match 
+      @en = SearchEnumerator.new do |y|
         class_look = lambda do |expression|
-          y.yield expression if match.is_like? expression
-          expression.each do |e| 
-            if e.is_a? Array
-              class_look.call(e)
+          if expression =~ match
+            y.yield expression
+          end
+          expression.each do |subexp|
+            if subexp.method(:=~).owner == MinimalMatch
+              class_look.call(subexp)
+            elsif @autoextend
+              if subexp.kind_of? Array
+                subexp.extend MinimalMatch
+                redo 
+              end
             end
           end
         end
         class_look.call(@array)
       end
-      @matches
+      @en.search_term = match
+      __setobj__ @en
     end
 
-    def pos
-      @matches
+    def to_s
+      "#<#{self.class}:0x#{'%x' % self.object_id << 1} array: #{@array}>"
     end
 
-    def pos= old_exp
-      @matches = old_exp
-    end
-
-    def rewind
-      @matches = nil 
-    end
-
-    def to_a
-      @matches
+    def inspect
+      to_s
     end
   end
 end
+
+#  vim: set ts=2 sw=2 tw=0 :

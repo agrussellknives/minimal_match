@@ -1,79 +1,12 @@
+#necessary sub files
+%w{ match_multiplying anything any_of }.each { |mod| require "#{File.dirname(__FILE__)}/#{mod}"}
+
 module MinimalMatch
-
-  # Array::Anything.  it will always be equal to whatever you compare it to 
-  class Anything < BasicObject
-     def Anything.flatten_match_array ma
-      ma.inject([]) do |m,o|
-        if o.instance_variable_get :@match_array
-          m.concat o
-        else
-          m << o 
-        end
-      end
-     end 
+  
+  class MatchProc < Proc
+    include MatchMultiplying
+  end
       
-    class << self
-      def === who_cares
-        true
-      end
-      
-      def to_a 
-        [AnyNumberOfThings]
-      end
-
-      def * num
-        raise ArgumentError, "can't multiply by non Fixnum #{num}" unless num.is_a? Fixnum
-        k = []
-        num.times do
-          k << Anything
-        end
-        k.instance_variable_set :@match_array, true
-        return k 
-      end
-
-      def coerce other
-        return self,other
-      end
-        
-    end
-  end
-
-  class AnyOf < BasicObject
-    class << self
-      def [] *args
-        self.new(args)
-      end
-    end
-    def initialize(args)
-      @match_arr = args
-    end
-
-    def method_missing meth, *args
-      nil
-    end
-
-    def class
-      AnyOf
-    end
-    
-    def inspect
-      "#{self.class}:#{@match_arr.to_s}"
-    end
-
-    def === obj
-      @match_arr.each do |m|
-        return true if m == obj
-      end
-      false
-    end
-  end
-
-  class AnyNumberOfThings < Anything; end
-
-  class << AnyNumberOfThings
-    undef_method :*
-  end
-
   # a very simple array pattern match for minimal s-exp pjarsing
   # basically, if your array contains at least yourmatch pattern
   # then it will match
@@ -86,24 +19,27 @@ module MinimalMatch
   #
   #
   
+  def MinimalMatch.flatten_match_array ma
+    MinimalMatch::MatchMultiplying.flatten_match_array ma
+  end  
+  
   def =~ match_array
-    match_array = Anything.flatten_match_array match_array 
+    match_array = MinimalMatch.flatten_match_array match_array 
     
     if self.length < match_array.length
        return false
     end
     
-    if match_array.include? AnyNumberOfThings
+    if match_array.detect { |i| i.kind_of? AnyNumber }
       #divide the match array into subarrays, splitting on AnyNumberOfThings
       # [ *anything, 5, *anything, 8] becomes
       # [[5],[8]]
       match_array = match_array.inject([[]]) do |res,el|
-        if el == AnyNumberOfThings
-          res << [] 
+        if (el.kind_of? AnyNumber)
+          any_num = []
+          any_num.instance_variable_set :@type, el.comp_obj
+          res << any_num 
         else
-          if el.is_a? Array
-            el.instance_variable_set :@recursed, true
-          end
           res.last << el
         end
         res
@@ -139,7 +75,7 @@ module MinimalMatch
         # as the search_array
         search_arr = self[pos..first_match]
         (search_arr.length - 1).times do
-          ma.unshift Anything
+          ma.unshift(ma.instance_variable_get(:@type))
         end
         # and run the regular match routin on them.
         return false unless search_arr =~ ma
