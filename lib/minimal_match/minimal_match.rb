@@ -106,15 +106,15 @@ module MinimalMatch
         end
         # expand the match array to be as long
         # as the search_array
-        search_arr = match_self[pos..first_match]
-        (search_arr.length - 1).times do
+        search_arr = match_self[pos..first_match+ma.length]
+        (search_arr.length - ma.length).times do
           ma.unshift(ma.type)
         end
         # and run the regular match routin on them.
         return false unless search_arr =~ ma
         # if we're still a match, move on the next position
         # and keep looking
-        pos = first_match + 1
+        pos = first_match + ma.length 
       end
       return true
     end

@@ -49,8 +49,9 @@ describe "simple array matching" do
 
   it "matches things at the end" do
     ([1,2,3,4,5] =~ [*MinimalMatch.anything, 5]).should == true
-    debugger
     ([1,2,3,4,5,6] =~ [*MinimalMatch.anything, 5,6]).should == true
+    debugger
+    ([1,2,3,4,5,6,7,8] =~ [*MinimalMatch.anything,5,6]).should == true
     ([1,2,3,4,5,6] =~ [*MinimalMatch.anything, 5]).should == true
   end
 
