@@ -10,9 +10,19 @@ module MinimalMatch
   end
 
   module MatchMultiplying
+    module MatchArray
+      attr_accessor :type
+      def match_array
+        true
+      end
+    end
+
     def MatchMultiplying.flatten_match_array ma
       ma.inject([]) do |m,o|
-        if o.instance_variable_get :@match_array
+        # check if it's a match anything array. since it's fairly
+        # likely the other object just doesn't respond to thatmessage
+        # assume it isn't if it doesn't
+        if (o.match_array rescue false) 
           m.concat o
         else
           m << o 
@@ -26,7 +36,7 @@ module MinimalMatch
       num.times do
         k << self
       end
-      k.instance_variable_set :@match_array, true
+      k.extend MatchArray #make it respond to "match_array"
       return k 
     end
 
@@ -34,9 +44,10 @@ module MinimalMatch
       unless @number_obj
         ar_class = Class.new(AnyNumber) do
           include Singleton
+          attr_accessor :comp_obj
           def to_s
             name = self.comp_obj.class.to_s.split('::').last
-            "#<AnyNumberMatching_#{name} instance: #{self.comp_obj.to_s}>"
+            "#<AnyNumberMatching_#{self.comp_obj.to_s}>"
           end
         end
         @number_obj = ar_class.instance()

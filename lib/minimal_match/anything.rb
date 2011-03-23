@@ -1,17 +1,18 @@
-require 'singleton'
-
 module MinimalMatch
 # Array::Anything.  it will always be equal to whatever you compare it to 
-  class Anything
-    include Singleton  #there can be only one
-    include MatchMultiplying 
+  class Anything < MinimalMatchObject
+    include MatchMultiplying
+    # it matches anything OTHER than another minimal matchobject
     def === who_cares
-      true
+      # i think there is a prettier way to do this with coerce
+      who_cares.class.superclass == MinimalMatchObject ? false : true
     end
+    alias :== :===
 
-    def == who_cares
-      true
+    def to_s
+      "<ANYTHING>"
     end
+    alias :inspect :to_s
 
     def coerce other
       return self, other

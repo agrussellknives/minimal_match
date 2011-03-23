@@ -1,6 +1,5 @@
 require 'minimal_match'
 
-
 class Array
   include MinimalMatch
 end
@@ -50,6 +49,9 @@ describe "simple array matching" do
 
   it "matches things at the end" do
     ([1,2,3,4,5] =~ [*MinimalMatch.anything, 5]).should == true
+    debugger
+    ([1,2,3,4,5,6] =~ [*MinimalMatch.anything, 5,6]).should == true
+    ([1,2,3,4,5,6] =~ [*MinimalMatch.anything, 5]).should == true
   end
 
   it "matches recursively with splat" do
@@ -69,7 +71,8 @@ describe "simple array matching" do
       it "flattens arrays when they are found" do
         x = [1,MinimalMatch.anything * 3, 5]
         x = MinimalMatch.flatten_match_array x
-        x.should == [1, MinimalMatch::Anything, MinimalMatch::Anything, MinimalMatch::Anything, 5]
+        z = MinimalMatch.anything # save me some typing
+        x.should == [1, z, z, z, 5]
       end
 
       it "doesn't flatten recursively" do
@@ -87,8 +90,9 @@ describe "simple array matching" do
       it "can flatten more than once" do
         x = [1, MinimalMatch.anything * 2, 4, MinimalMatch.anything * 3]
         x = MinimalMatch.flatten_match_array x
-        x.should == [1, MinimalMatch::Anything, MinimalMatch::Anything, 4, 
-          MinimalMatch::Anything, MinimalMatch::Anything, MinimalMatch::Anything]
+        z = MinimalMatch.anything
+        x.should == [1, z, z, 4, 
+          z, z, z]
       end
     end
 
@@ -143,7 +147,7 @@ describe "simple array matching" do
   end
 
   it "can define those lambda in place like a rockstar" do
-    x = [1,2,3,->(x){ x > 4 and x < 8}]
+    x = [1,2,3,->(y){ y > 4 and y < 8}]
     ([1,2,3,4] =~ x).should == false
     ([1,2,3,6] =~ x).should == true
     ([1,2,3,7] =~ x).should == true
@@ -156,6 +160,28 @@ describe "simple array matching" do
     ([1,2,3] =~ x).should == true
     ([8,65,3] =~ x).should == true
     (['no',2,3] =~ x).should == false
+  end
+
+  it "can match the beginning of Arrays" do
+    beg = MinimalMatch.beginning
+    # so actually begin is pretty useless in most instances
+    ([1,2,3] =~ [beg,1,2,3]).should == true 
+    ([1,2,3] =~ [beg,2,3]).should == false
+    ([1,2,3,4,5] =~ [3,4,beg,1,2,3]).should == true
+  end
+
+  it "can match the end of an Array" do
+    ending = MinimalMatch.ending
+    whatev = MinimalMatch.anything
+    ([1,2,3,4,5] =~ [1,2,3,ending]).should == false
+    ([1,2,3] =~ [1,2,3,ending]).should == true
+    # find something only at the end 
+    debugger
+    ([1,2,3,4,5,6] =~ [*whatev, 4,5]).should == true # just for demonstrating
+    ([1,2,3,4,5,6] =~ [*whatev, 4,5, ending]).should == false
+    ([1,2,3,4,5,6] =~ [*whatev, 5,6, ending]).should == true
+    is_array = lambda { |x| x.is_a? Array } 
+    ([1,2,[3,4,[5,6]]] =~ [1,2,is_array, ending]).should == true
   end
 end
    
