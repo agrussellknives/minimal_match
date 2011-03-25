@@ -7,63 +7,85 @@ end
 
 describe "simple array matching" do
 
-  it "should do obvious things" do
-    ([1,2,3] =~ [1,2,3]).should == true
-    (['a','b','c'] =~ ['a','b','c']).should == true
-    ([{:foo => :bar},{:baz => :bab}] =~ [{:foo => :bar},{:baz => :bab}]).should == true
+  describe "dead simple stuff" do
+    it "should do obvious things" do
+      ([1,2,3] =~ [1,2,3]).should == true
+      (['a','b','c'] =~ ['a','b','c']).should == true
+      ([{:foo => :bar},{:baz => :bab}] =~ [{:foo => :bar},{:baz => :bab}]).should == true
+      ([1,2,3] =~ [3,2,1]).should == false
+    end
+
+    it "is a non greedy matcher" do
+      ([1,2,3,4,5] =~ [1,2,3]).should == true
+      ([1,2,3] =~ [1,2,3,4,5]).should == false
+    end
+
+    it "matches in the middle" do
+      ([1,2,3,4,5] =~ [3,4]).should == true
+      ([1,2,3,4,5] =~ [3,5]).should == false
+      ([1,2,3,4,5] =~ [4,5,6]).should == false
+    end
+
+    it "matches recursively" do
+      ([1,[2,3,[4,5]]] =~ [1,[2,3,[4,5]]]).should == true
+      ([1,[2,[4]]] =~ [1,[2,[4]]]).should == true
+      # match pattern is too specific
+      ([1,[2,[4]]] =~ [1,[2,3,[4]]]).should == false 
+
+      #because position two of the array is not [3,4]
+      ([1,2,[3,4,5]] =~ [1,[3,4]]).should == false
+    end
   end
 
-  it "is a non greedy matcher" do
-    ([1,2,3,4,5] =~ [1,2,3]).should == true
-    ([1,2,3] =~ [1,2,3,4,5]).should == false
+  describe "matches anything" do
+    it "simply" do
+      ([1,2,3,4,5] =~ [MinimalMatch.anything,2,3,4,5]).should == true
+      ([1,2,3,4,5] =~ [MinimalMatch.anything]).should == true
+      ([1,2,3,4,5] =~ [MinimalMatch.anything,3]).should == false
+    end
+
+    it "recursively" do
+      #([1,[2,3,[4,5,6]]] =~ [1,[2,MinimalMatch.anything,[4,MinimalMatch.anything,6]]]).should == true
+      ([1,2,[3,4,5]] =~ [1,MinimalMatch.anything,[3,4]]).should == true
+    end
   end
 
-  it "matches recursively" do
-    ([1,[2,3,[4,5]]] =~ [1,[2,3,[4,5]]]).should == true
-    ([1,[2,[4]]] =~ [1,[2,[4]]]).should == true
-    # match pattern is too specific
-    ([1,[2,[4]]] =~ [1,[2,3,[4]]]).should == false 
+  #it "returns index of pattern" do
+    #([1,2,3,4,5].match_index(3)).should == 2
+    #([1,2,[3,4],5].match_index([3,4])).should == 2
+    #([1,2,[3,4,5],6].match_index([3,4])).should == 2
+    #([1,2,[3,4],5,6].match_index([3,4,5])).should == nil
+    #([1,2,[3,[4,5]]].match_index([4,5])).should == nil
+    #([1,2,3,[4],5]).match_index([4]).should == 3
+    #([1,2,3,[4],5]).match_index(4).should == nil
+  #end
 
-    #because position two of the array is not [3,4]
-    ([1,2,[3,4,5]] =~ [1,[3,4]]).should == false
-  end
+  describe "splat matching" do
+    it "matches greedily with splat" do
+      ([1,2,3,4,5] =~ [1,*MinimalMatch.anything,5]).should == true
+      ([1,2,3,4,5] =~ [1,*MinimalMatch.anything]).should == true
+      # ends with something not in the array
+      ([1,2,3,4,5] =~ [1,*MinimalMatch.anything,6]).should == false
+    end
 
-  it "matches with MinimalMatch.anything" do
-    ([1,2,3,4,5] =~ [MinimalMatch.anything,2,3,4,5]).should == true
-    ([1,2,3,4,5] =~ [MinimalMatch.anything]).should == true
-    ([1,2,3,4,5] =~ [MinimalMatch.anything,3]).should == false
-  end
+    it "matches things at the end" do
+      ([1,2,3,4,5] =~ [*MinimalMatch.anything, 5]).should == true
+      ([1,2,3,4,5,6] =~ [*MinimalMatch.anything, 5,6]).should == true
+      ([1,2,3,4,5,6,7,8] =~ [*MinimalMatch.anything,5,6]).should == true
+      ([1,2,3,4,5,6] =~ [*MinimalMatch.anything, 5]).should == true
+    end
 
-  it "maches with MinimalMatch.anything recursively" do
-    ([1,[2,3,[4,5,6]]] =~ [1,[2,MinimalMatch.anything,[4,MinimalMatch.anything,6]]]).should == true
-    ([1,2,[3,4,5]] =~ [1,MinimalMatch.anything,[3,4]]).should == true
-    
-  end
+    it "matches recursively with splat" do
+      ([1,2,3,4,[3,4,5]] =~ [1,*MinimalMatch.anything,[3,4]]).should == true
+      ([1,2,[3,4],5,6,[7,8]] =~ [1,2,[3,4],*MinimalMatch.anything, [7,8]]).should == true
+      ([1,2,[3,4,[5,6,7,8]],9,10] =~ [1,2,[3,4,[5,6,7,8]], *MinimalMatch.anything]).should == true
+    end
 
-  it "matches greedily with splat" do
-    ([1,2,3,4,5] =~ [1,*MinimalMatch.anything,5]).should == true
-    ([1,2,3,4,5] =~ [1,*MinimalMatch.anything]).should == true
-    # ends with something not in the array
-    ([1,2,3,4,5] =~ [1,*MinimalMatch.anything,6]).should == false
-  end
-
-  it "matches things at the end" do
-    ([1,2,3,4,5] =~ [*MinimalMatch.anything, 5]).should == true
-    ([1,2,3,4,5,6] =~ [*MinimalMatch.anything, 5,6]).should == true
-    debugger
-    ([1,2,3,4,5,6,7,8] =~ [*MinimalMatch.anything,5,6]).should == true
-    ([1,2,3,4,5,6] =~ [*MinimalMatch.anything, 5]).should == true
-  end
-
-  it "matches recursively with splat" do
-    ([1,2,3,4,[3,4,5]] =~ [1,*MinimalMatch.anything,[3,4]]).should == true
-    ([1,2,[3,4,[5,6,7,8]],9,10] =~ [1,2,[3,4,[5,6,7,8]], *MinimalMatch.anything]).should == true
-  end
-
-  it "matches multiple splats" do
-    ([1,2,3,4,5,6,7,8] =~ [1,*MinimalMatch.anything,5,*MinimalMatch.anything,8]).should == true
-    ([1,2,[3,4,5],[6,7,8,9]] =~ [1,2,[3,MinimalMatch.anything,5],[6,*MinimalMatch.anything,9]]).should == true
-    ([1,2,[3,4,4.5,4.75,5],[6,8,8,9]] =~ [1,2,[3,*MinimalMatch.anything,5],[6,*MinimalMatch.anything,9]]).should == true
+    it "matches multiple splats" do
+      ([1,2,3,4,5,6,7,8] =~ [1,*MinimalMatch.anything,5,*MinimalMatch.anything,8]).should == true
+      ([1,2,[3,4,5],[6,7,8,9]] =~ [1,2,[3,MinimalMatch.anything,5],[6,*MinimalMatch.anything,9]]).should == true
+      ([1,2,[3,4,4.5,4.75,5],[6,8,8,9]] =~ [1,2,[3,*MinimalMatch.anything,5],[6,*MinimalMatch.anything,9]]).should == true
+    end
   end
 
   it "matches an specifc number of MinimalMatch.anythings" do
@@ -92,8 +114,7 @@ describe "simple array matching" do
         x = [1, MinimalMatch.anything * 2, 4, MinimalMatch.anything * 3]
         x = MinimalMatch.flatten_match_array x
         z = MinimalMatch.anything
-        x.should == [1, z, z, 4, 
-          z, z, z]
+        x.should == [1, z, z, 4, z, z, z]
       end
     end
 
@@ -171,13 +192,16 @@ describe "simple array matching" do
     ([1,2,3,4,5] =~ [3,4,beg,1,2,3]).should == true
   end
 
+  it "can use anything which responds to ===" do
+    ([1,"bob",[1,2]] =~ [Fixnum, String, Array]).should == true
+  end
+
   it "can match the end of an Array" do
     ending = MinimalMatch.ending
     whatev = MinimalMatch.anything
     ([1,2,3,4,5] =~ [1,2,3,ending]).should == false
     ([1,2,3] =~ [1,2,3,ending]).should == true
     # find something only at the end 
-    debugger
     ([1,2,3,4,5,6] =~ [*whatev, 4,5]).should == true # just for demonstrating
     ([1,2,3,4,5,6] =~ [*whatev, 4,5, ending]).should == false
     ([1,2,3,4,5,6] =~ [*whatev, 5,6, ending]).should == true
