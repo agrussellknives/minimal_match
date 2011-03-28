@@ -20,11 +20,11 @@ module MinimalMatch
     end
 
     def inspect
-      "#<#{'0x' % self.id << 1} pattern: #{@pattern} array: #{@array} begin: #{@first_index} end: #{@end_index}>"
+      "#<ArrayMatchData:0x#{'%x' % (self.__id__ << 1)} pattern: #{@pattern} array: #{@array} begin: #{@first_index} end: #{@end_index}>"
     end
 
     def length
-      @end_index - @first_index
+      (@end_index - @first_index) + 1 # inclusive
     end
 
     def post_match

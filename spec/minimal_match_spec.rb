@@ -27,11 +27,18 @@ describe "simple array matching" do
     end
 
     it "matches recursively" do
+      # it WON'T match this because it's looking for [3,4] in the origional array
+      ([1,2,[3,4],5] =~ [3,4]).should == false
+      # in order to match it you have to give the correct nesting level
+      ([1,2,[3,4],5] =~ [[3,4]]).should == true
+      
       ([1,[2,3,[4,5]]] =~ [1,[2,3,[4,5]]]).should == true
       ([1,[2,[4]]] =~ [1,[2,[4]]]).should == true
-      # match pattern is too specific
+      
+      # match pattern is too specific (ie, it has a 3 follow array 2)
       ([1,[2,[4]]] =~ [1,[2,3,[4]]]).should == false 
-
+      # in order to match both see the maybe thing
+      
       #because position two of the array is not [3,4]
       ([1,2,[3,4,5]] =~ [1,[3,4]]).should == false
     end
@@ -45,20 +52,27 @@ describe "simple array matching" do
     end
 
     it "recursively" do
-      #([1,[2,3,[4,5,6]]] =~ [1,[2,MinimalMatch.anything,[4,MinimalMatch.anything,6]]]).should == true
+      ([1,[2,3,[4,5,6]]] =~ [1,[2,MinimalMatch.anything,[4,MinimalMatch.anything,6]]]).should == true
       ([1,2,[3,4,5]] =~ [1,MinimalMatch.anything,[3,4]]).should == true
     end
   end
 
-  #it "returns index of pattern" do
-    #([1,2,3,4,5].match_index(3)).should == 2
-    #([1,2,[3,4],5].match_index([3,4])).should == 2
-    #([1,2,[3,4,5],6].match_index([3,4])).should == 2
-    #([1,2,[3,4],5,6].match_index([3,4,5])).should == nil
-    #([1,2,[3,[4,5]]].match_index([4,5])).should == nil
-    #([1,2,3,[4],5]).match_index([4]).should == 3
-    #([1,2,3,[4],5]).match_index(4).should == nil
-  #end
+  it " matches things that might not be there" do
+    m = [1,[2,MinimalMatch.maybe(3),[4]]]
+    #([1,[2,3,[4]]] =~ m).should == true
+    ([1,[2,[4]]] =~ m).should == true
+  end
+
+  it "returns index of pattern" do
+    ([1,2,3,4,5].match([3]).begin).should == 2
+    x = [1,2,3,4,5].match([3,4])
+    x.begin.should == 2
+    x.end.should == 3
+    x.length.should == 2
+    ([1,2,[3,4,5],6].match([[3,4]]).begin).should == 2
+    ([1,2,[3,4],5,6].match([[3,4,5]])).should == false
+    ([1,2,3,[4],5].match([[4]]).begin).should == 3
+  end
 
   describe "splat matching" do
     it "matches greedily with splat" do
@@ -184,6 +198,13 @@ describe "simple array matching" do
     (['no',2,3] =~ x).should == false
   end
 
+  it "can splat a match_proc" do
+    is_integer = MinimalMatch::MatchProc.new { |x| x.is_a? Fixnum }
+    x = [*is_integer,'bob']
+    ([1,2,3] =~ x).should == false
+    ([1,2,3,'bob'] =~ x).should == true
+  end
+
   it "can match the beginning of Arrays" do
     ([1,2,3] =~ [MinimalMatch.begins_with(1),2,3]).should == true 
     ([1,2,3] =~ [MinimalMatch.begins_with(2),3]).should == false
@@ -201,10 +222,9 @@ describe "simple array matching" do
     # find something only at the end 
     ([1,2,3,4,5,6] =~ [*whatev, 4,5]).should == true # just for demonstrating
     ([1,2,3,4,5,6] =~ [*whatev, 4,5, MinimalMatch.ends_with(6)]).should == true 
-    debugger
     ([1,2,3,4,5,6,7] =~ [*whatev,5,MinimalMatch.ends_with(6)]).should == false 
     is_bob = lambda { |x| x == 'bob' } 
-    ([1,2,[3,4,[5,6]]] =~ [1,2,is_array, MinimalMatch.ends_with(Array)]).should == true
+    ([1,2,[3,4]] =~ [1,2, MinimalMatch.ends_with(Array)]).should == true
     ([1,2,3,'bob'] =~ [*whatev, MinimalMatch.ends_with(is_bob)]).should == true
   end
 end

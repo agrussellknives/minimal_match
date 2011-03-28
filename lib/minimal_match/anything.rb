@@ -9,8 +9,11 @@ module MinimalMatch
       # i think there is a prettier way to do this with coerce
       # basically Anything is equal to anything OTHER than a different
       # minimal match objecA
-      if who_cares.kind_of? MinimalMatchObject and not who_cares.eql? 
-      who_cares.kind_of? MinimalMatchObject ? false : true
+      if who_cares.kind_of? MinimalMatchObject and not who_cares.eql? self
+        false
+      else
+        true
+      end
     end
     alias :== :===
 
