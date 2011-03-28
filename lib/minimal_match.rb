@@ -39,7 +39,6 @@ module MinimalMatch
     end
   end
   # since you can't look up the module from that scope
-  MinimalMatchObject.send :include, Singleton
   MinimalMatchObject.send :include, Kernel
 end
 

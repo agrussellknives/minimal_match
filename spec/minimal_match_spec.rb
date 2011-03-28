@@ -185,11 +185,9 @@ describe "simple array matching" do
   end
 
   it "can match the beginning of Arrays" do
-    beg = MinimalMatch.beginning
-    # so actually begin is pretty useless in most instances
-    ([1,2,3] =~ [beg,1,2,3]).should == true 
-    ([1,2,3] =~ [beg,2,3]).should == false
-    ([1,2,3,4,5] =~ [3,4,beg,1,2,3]).should == true
+    ([1,2,3] =~ [MinimalMatch.begins_with(1),2,3]).should == true 
+    ([1,2,3] =~ [MinimalMatch.begins_with(2),3]).should == false
+    ([1,2,3,4,5] =~ [3,4,MinimalMatch.begins_with(1),2,3]).should == true
   end
 
   it "can use anything which responds to ===" do
@@ -197,16 +195,17 @@ describe "simple array matching" do
   end
 
   it "can match the end of an Array" do
-    ending = MinimalMatch.ending
     whatev = MinimalMatch.anything
-    ([1,2,3,4,5] =~ [1,2,3,ending]).should == false
-    ([1,2,3] =~ [1,2,3,ending]).should == true
+    ([1,2,3,4,5] =~ [1,2,MinimalMatch.ends_with(3)]).should == false
+    ([1,2,3] =~ [1,2,MinimalMatch.ends_with(3)]).should == true
     # find something only at the end 
     ([1,2,3,4,5,6] =~ [*whatev, 4,5]).should == true # just for demonstrating
-    ([1,2,3,4,5,6] =~ [*whatev, 4,5, ending]).should == false
-    ([1,2,3,4,5,6] =~ [*whatev, 5,6, ending]).should == true
-    is_array = lambda { |x| x.is_a? Array } 
-    ([1,2,[3,4,[5,6]]] =~ [1,2,is_array, ending]).should == true
+    ([1,2,3,4,5,6] =~ [*whatev, 4,5, MinimalMatch.ends_with(6)]).should == true 
+    debugger
+    ([1,2,3,4,5,6,7] =~ [*whatev,5,MinimalMatch.ends_with(6)]).should == false 
+    is_bob = lambda { |x| x == 'bob' } 
+    ([1,2,[3,4,[5,6]]] =~ [1,2,is_array, MinimalMatch.ends_with(Array)]).should == true
+    ([1,2,3,'bob'] =~ [*whatev, MinimalMatch.ends_with(is_bob)]).should == true
   end
 end
    

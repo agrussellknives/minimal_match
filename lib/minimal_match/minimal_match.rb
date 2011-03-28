@@ -13,18 +13,30 @@ module MinimalMatch
     include MatchMultiplying
   end
 
-  class End < MinimalMatchObject
-    def === must_nil
-      must_nil.nil? ? true : false
+  class MarkerObject < MinimalMatchObject
+    def initialize val
+      super()  #huh
+      @comp_value = val
     end
+
+    def === val
+      @comp_value === val
+    end
+
+    def inspect
+      "<#{self.class} == #{comp_value}>"
+    end
+    alias :== :===
   end
-  class Begin < MinimalMatchObject; end 
 
-  def ending; End.instance(); end
-  module_function :ending
+  class End < MarkerObject; end
+  class Begin < MarkerObject; end 
 
-  def beginning; Begin.instance(); end
-  module_function :beginning
+  def ends_with(val); End.new(val); end
+  module_function :ends_with
+
+  def begins_with(val); Begin.new(val); end
+  module_function :begins_with
 
   def match_proc; MatchProc.new &block; end
   module_function :match_proc
@@ -62,65 +74,20 @@ module MinimalMatch
     
     ind = false 
 
-    #there is no need to look past END
-    if match_array.include?(ending)
-      ind = match_array.index(ending)
-      match_self = match_self[0..match_array.index(ending)]
-      match_array = match_array[0..ind] # you can drop the end marker now
+    #there is no need to look past END or before BEGIN
+    match_array.find_all { |i| i.kind_of? MarkerObject }.each do |val| 
+      case val
+        when End
+          match_array = match_array[0..match_array.index(val)]
+        when Begin
+          match_array = match_array[match_array.index(val)..-1]
+      end
     end
 
-    #or before the beginning
-    if match_array.include?(beginning)
-      ind = match_array.index(beginning)+1
-      match_array = match_array[ind..-1]
-    end
-
-       
     if match_self.length < (ind || match_array.length)
        return false
     end
     
-    if match_array.detect { |i| i.kind_of? AnyNumber }
-      #divide the match array into subarrays, splitting on AnyNumberOfThings
-      # [ *anything, 5, *anything, 8] becomes
-      # [[5],[8]]
-      expanded_match_array = []
-
-      match_array = match_array.inject([[]]) do |res,el|
-        if (el.kind_of? AnyNumber)
-          (any_num = []).extend MatchMultiplying::MatchArray
-          any_num.type = el.comp_obj
-          res << any_num 
-        else
-          res.last << el
-        end
-        res
-      end
-
-      # this first part of the expanded match array is exactly the same.
-      # a leading glob will append an empty array
-      
-      expanded_match_array.concat match_array[0]
-       
-      # no need to start at the beginning
-      idx = expanded_match_array.length
-       
-      match_array[1..-1].inject(expanded_match_array) do |ema, ma|
-        first_occurence = match_self[idx..-1].match(ma).begin
-        puts "found #{ma} at #{first_occurence} in #{match_self[idx..-1]}"
-        unless first_occurence  #couldn't find a match
-          first_occurence = match_self[idx..-1].length #so at the end
-        end
-        first_occurence.times do
-          ema << ma.type 
-        end
-        ema.concat ma
-        idx = ema.length
-      end
-      
-      match_array = expanded_match_array
-    end
-
     match_enum = match_array.each
     self_enum = match_self.each_with_index
     
@@ -138,24 +105,43 @@ module MinimalMatch
       puts "(it was #{r})"
       r
     end
-
+    
+    # what i need to do is only iterate self_enum until the value
+    # matches the item immediately after the splat
     cmp_lamb = lambda do |val|
       prev_idx = last_idx
       begin
         if self_enum.end?
-          puts "returning false"
           return false
         end
         match_item, last_idx = self_enum.next
         found = cond_comp[val, match_item]
+        if found and val.kind_of? MarkerObject then
+          debugger if End === val 
+          case val
+            when End
+              return false if last_idx != (match_self.length - 1)
+            when Begin
+              return false if last_idx != 0
+          end
+        end
+           
+        last = if val.kind_of? AnyNumber then cond_comp[match_enum.peek, self_enum.peek[0]] else false end rescue true
         if found and not prev_idx.nil?
           return false unless prev_idx.succ == last_idx
         end
+        puts "found #{found}"
       end until found
       first_idx ||= last_idx
       res = unless match_enum.end? 
-        puts "found match at position #{last_idx} advancing..."
-        cmp_lamb.call match_enum.next
+        nv = if not val.kind_of? AnyNumber or last then
+          puts "nexted match_enum"
+          match_enum.next
+        else
+          puts "left match _enum"
+          val
+        end
+        cmp_lamb.call(nv)
       else
         true
       end

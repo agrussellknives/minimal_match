@@ -11,10 +11,6 @@ module MinimalMatch
       mtch2.begin == @first_index && mtch2.end == @end_index && mtch2.pattern == @pattern && mtch.array == @array
     end
 
-    def []
-      raise NotImplmentedError
-    end
-      
     def begin
       @first_index
     end
@@ -45,6 +41,15 @@ module MinimalMatch
 
     def array
       @array.dup.freeze
+    end
+
+    # deals with multiple matches, which we don't
+    # support... yet
+    [:[], :captures, :names, :offset, :to_a, :to_s,
+     :values_at].each do |m|
+      define_method m do |*args|
+        raise NotImplementError
+      end
     end
 
     # things that maybe we implement later

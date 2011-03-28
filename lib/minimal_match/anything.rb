@@ -5,7 +5,9 @@ module MinimalMatch
     # it matches anything OTHER than another minimal matchobject
     def === who_cares
       # i think there is a prettier way to do this with coerce
-      who_cares.class.superclass == MinimalMatchObject ? false : true
+      # basically Anything is equal to anything OTHER than a different
+      # minimal match object
+      who_cares.kind_of? MinimalMatchObject ? false : true
     end
     alias :== :===
 
