@@ -1,7 +1,7 @@
 require 'singleton'
 
 module MinimalMatch
-  class AnyNumber
+  class ZeroOrMore 
     attr_accessor :comp_obj
     def === other
       self.comp_obj === other
@@ -9,7 +9,12 @@ module MinimalMatch
     alias :== :===
   end
 
+  class OneOrMore < ZeroOrMore; end
+  class ZeroOrOne < ZeroOrMore; end
+
   module MatchMultiplying
+    attr_accessor :non_greedy
+
     module MatchArray
       attr_accessor :type
       def match_array
@@ -40,20 +45,36 @@ module MinimalMatch
       return k 
     end
 
+    def [] range
+      #this is where 2..8 would go
+      raise NotImplemented
+    end
+
+    def +@
+      @one_or_more_obj ||= count_class(OneOrMore)
+    end
+
+    def maybe
+      @one_or_zero_obj ||= count_class(ZeroOrOne) 
+    end
+
     def to_a
-      unless @number_obj
-        ar_class = Class.new(AnyNumber) do
-          include Singleton
-          attr_accessor :comp_obj
-          def to_s
-            name = self.comp_obj.class.to_s.split('::').last
-            "#<AnyNumberMatching_#{self.comp_obj.to_s}>"
-          end
+      @zero_or_more_obj ||= count_class(ZeroOrMore)
+    end
+
+    private
+    def count_class super_class
+      t = self.instance_eval <<-RUBY 
+        Class.new(#{super_class}) do
+        include Singleton
+        attr_accessor :comp_obj
+        def to_s
+          "#{super_class}Matching #{self.comp_obj.to_s}>"
         end
-        @number_obj = ar_class.instance()
-        @number_obj.comp_obj = self
       end
-      [@number_obj]
+      RUBY
+      t.instance.comp_obj = self
+      t.instance
     end
   end
 end

@@ -2,8 +2,11 @@ require 'singleton'
 # this is the class from which a many of the special objects are derived, so it
 # has to be defined when they are first called
 module MinimalMatch
+  module LinkObjects
+    attr_accessor :left, :right
+  end
+
   class MinimalMatchObject < BasicObject
-    
     def class
       class << self
         self.superclass
@@ -37,9 +40,11 @@ module MinimalMatch
     def inspect
       "<#{@class_name}>"
     end
+    alias :to_s :inspect
   end
   # since you can't look up the module from that scope
   MinimalMatchObject.send :include, Kernel
+  MinimalMatchObject.send :include, LinkObjects
 end
 
 require 'minimal_match/minimal_match'

@@ -9,9 +9,114 @@ end
 
 module MinimalMatch
 
-  class MatchProc < Proc
-    include MatchMultiplying
+  class MatchGroup < MinimalMatchObject
+    def inspect
+      r = @right
+      string = "<#{self.class}:##{'%x' % self.__id__ << 1} ->"
+      while r
+        string << "#{r.to_s}"
+        r = r.right
+        string << " -> " if r
+      end
+      string << " >"
+      string
+    end
   end
+
+  class MatchPattern
+    def initialize ma
+      @match_array = ma
+    end
+
+    class Jumperator < Fiber
+      def initialize &block
+        @peek_mutex = Mutex.new
+        @index = 0
+        @le_fiber = Fiber.new &block 
+      end
+
+      def resume 
+        @le_fiber.resume @index
+      end
+
+      def index
+        @index
+      end
+
+      def index= ps
+        @index = ps
+        resume
+      end
+
+      def prev
+        @index -= 1
+        resume
+      end
+
+      def next
+        @index += 1
+        resume
+      end
+
+      def peek
+        @peek_mutex.synchronize do
+          @index += 1
+          resume
+          @index -= 1
+        end
+      end
+
+      def back_peek
+        @peek_mutex.synchronize do
+          @index -= 1
+          resume
+          @index += 1
+        end
+      end
+
+      def end?
+        !(!!self.peek) rescue true
+      end
+    end
+
+    def jumperator 
+      Jumperator.new do 
+        idx ||= 0
+        while 1
+          idx = 0 if idx < 0
+          if idx <= @match_array.length
+            idx = Fiber.yield @match_array[idx]
+          else
+            raise StopIteration
+          end
+        end
+      end
+    end
+  end
+         
+
+  class MatchProxy < MinimalMatchObject
+    instance_methods.each { |m| undef_method m unless m =~ /^__|include/ } 
+    attr_accessor :comp_obj
+
+    def initialize val
+      @comp_obj = val
+    end
+
+    def is_proxy
+      true
+    end
+
+    def to_s
+      "<#{@comp_obj.to_s} : MatchProxy>"
+    end
+
+    def method_missing meth, *args
+      @comp_obj.__send__ meth, *args
+    end
+  end
+  MatchProxy.__send__ :include, MatchMultiplying
+  MatchProxy.__send__ :include, LinkObjects
 
   class MarkerObject < MinimalMatchObject
     def initialize val
@@ -32,17 +137,8 @@ module MinimalMatch
 
   class End < MarkerObject; end
   class Begin < MarkerObject; end 
-  class Maybe < MarkerObject
-    def === val
-      true
-    end
-
-    def == val
-      @comp_value == val
-    end
-  end
-  
-  def maybe(val); Maybe.new(val); end
+    
+  def maybe(val); MatchProxy.new(val).maybe; end
   module_function :maybe
 
   def ends_with(val); End.new(val); end
@@ -51,7 +147,7 @@ module MinimalMatch
   def begins_with(val); Begin.new(val); end
   module_function :begins_with
 
-  def match_proc; MatchProc.new &block; end
+  def match_proc(&block); MatchProc.new &block; end
   module_function :match_proc
 
   # a very simple array pattern match for minimal s-exp pjarsing
@@ -67,10 +163,6 @@ module MinimalMatch
   #
   #
   
-  def MinimalMatch.flatten_match_array ma
-    MinimalMatch::MatchMultiplying.flatten_match_array ma
-  end
-
   # non-recursively find the index of a pattern matching `pattern`
   #
   def match match_array
@@ -83,34 +175,36 @@ module MinimalMatch
 
   def =~ match_array
     @debug = true
-    match_array = MinimalMatch.flatten_match_array match_array #flatten specific length matches
     match_self = self.dup #dup self to the local so that we don't mess it up
    
     puts "comping #{match_self} to #{match_array}"
 
     included_length = false
 
-    #there is no need to look past END or before BEGIN
-    match_array.find_all { |i| i.kind_of? MarkerObject }.each do |val| 
-      case val
-        when End
-          match_array = match_array[0..match_array.index(val)]
-        when Begin
-          match_array = match_array[match_array.index(val)..-1]
-        when Maybe
-          # substract one of the necessary length for a match
-          # for each maybe
-          included_length ||= match_array.length
-          included_length -= 1
-        end
-    end
+    #there is no need to look past END or before BEGINh
+    # ignore thie optimzation for now
+    #match_array.find_all { |i| i.kind_of? MarkerObject }.each do |val| 
+      #case val
+        #when End
+          #match_array = match_array[0..match_array.index(val)]
+        #when Begin
+          #match_array = match_array[match_array.index(val)..-1]
+        #when Maybe
+          ## substract one of the necessary length for a match
+          ## for each maybe
+          #included_length ||= match_array.length
+          #included_length -= 1
+        #end
+    #end
 
-    if match_self.length < (included_length || match_array.length)
-       return false
-    end
+    #if match_self.length < (included_length || match_array.length)
+       #return false
+    #end
     
-    match_enum = match_array.each
+    match_enum = MatchPattern.new(match_array).jumperator
     self_enum = match_self.each_with_index
+
+    debugger
     
     first_idx = nil
     last_idx = nil
@@ -134,37 +228,12 @@ module MinimalMatch
       prev_idx = last_idx
       begin
         #debugger if val.kind_of? MarkerObject
-        if self_enum.end?
-          return false
-        end
         match_item, last_idx = self_enum.next
-        found = cond_comp[val, match_item]
-        if found and val.kind_of? MarkerObject then
-          case val
-            when End
-              return false if last_idx != (match_self.length - 1)
-            when Begin
-              return false if last_idx != 0
-            when Maybe
-              # if it was our item, then okay!
-              unless val == match_item
-                # other wise, peek the next item and say "false" if that's not it
-                return false if not cond_comp[match_enum.peek, match_item] rescue true
-                stop_flag = true
-              end
-          end
-        end
-        last = if val.kind_of? AnyNumber then cond_comp[match_enum.peek, self_enum.peek[0]] else false end rescue true
-        if found and not prev_idx.nil?
-          return false unless prev_idx.succ == last_idx
-        end
-        puts "found #{found}" if @debug
       end until found
       first_idx ||= last_idx
       res = unless match_enum.end? 
         nv = if not val.kind_of? AnyNumber or last then
           puts "next match_enum!" if @debug
-          debugger if stop_flag
           match_enum.next
         else
           puts "stay on match_enum!" if @debug
@@ -182,5 +251,6 @@ module MinimalMatch
     @first_index = first_idx
     @last_index = last_idx
     mt_found
+
   end
 end
