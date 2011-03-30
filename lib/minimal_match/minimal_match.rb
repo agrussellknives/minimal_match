@@ -1,6 +1,8 @@
 #necessary sub files
 %w{ match_multiplying anything any_of array_match_data }.each { |mod| require "#{File.dirname(__FILE__)}/#{mod}"}
 
+require 'fiber'
+
 class Enumerator
   def end?
     !(!!self.peek) rescue true
@@ -24,29 +26,49 @@ module MinimalMatch
   end
 
   class MatchPattern
+    
+    
     def initialize ma
       @match_array = ma
     end
+    
+    def each
+      unless block_given?
+        ReversibleEnumerator.new @match_array 
+      else
+        @match_array.each &block
+      end
+    end
 
-    class Jumperator < Fiber
-      def initialize &block
+    class ReversibleEnumerator 
+      def initialize obj
         @peek_mutex = Mutex.new
-        @index = 0
-        @le_fiber = Fiber.new &block 
+        @index = -1 
+        @obj = obj
+        @enum = Enumerator.new do |y|
+          while true
+            if @index < @obj.length
+              raise StopIteration if @index < 0
+              last = @obj[@index]
+              y << last
+              # you called prev on the first position
+              # but you unshifted an item since then
+              if @index < 0
+                newdex = @obj.index(last)
+                raise StopIteration unless newdex
+                @index = newdex - 1
+              end
+            else
+              raise StopIteration
+            end
+          end
+        end
       end
 
-      def resume 
-        @le_fiber.resume @index
+      def resume
+        @enum.next
       end
-
-      def index
-        @index
-      end
-
-      def index= ps
-        @index = ps
-        resume
-      end
+      private :resume
 
       def prev
         @index -= 1
@@ -54,42 +76,47 @@ module MinimalMatch
       end
 
       def next
-        @index += 1
+        # post add on the first call, preadd on any other call.
+        @index += 1 
         resume
       end
 
+      def rewind
+        @index = 0
+      end
+
       def peek
+        r = nil
         @peek_mutex.synchronize do
           @index += 1
-          resume
-          @index -= 1
+          r = resume
         end
+        r
+      ensure
+        puts "i ran!"
+        @index -= 1
+        @index = @obj.length - 1 if @index > @obj.length - 1
       end
 
       def back_peek
+        r = nil
         @peek_mutex.synchronize do
           @index -= 1
-          resume
-          @index += 1
+          r = resume
         end
+        r
+      ensure 
+        puts "i nar!"
+        @index += 1
+        @index = -1 if @index < -1
       end
 
       def end?
         !(!!self.peek) rescue true
       end
-    end
 
-    def jumperator 
-      Jumperator.new do 
-        idx ||= 0
-        while 1
-          idx = 0 if idx < 0
-          if idx <= @match_array.length
-            idx = Fiber.yield @match_array[idx]
-          else
-            raise StopIteration
-          end
-        end
+      def begin?
+        !(!!self.back_peek) rescue true
       end
     end
   end
@@ -201,11 +228,9 @@ module MinimalMatch
        #return false
     #end
     
-    match_enum = MatchPattern.new(match_array).jumperator
+    match_enum = MatchPattern.new(match_array).each
     self_enum = match_self.each_with_index
 
-    debugger
-    
     first_idx = nil
     last_idx = nil
 
@@ -223,28 +248,24 @@ module MinimalMatch
     
     # what i need to do is only iterate self_enum until the value
     # matches the item immediately after the splat
-    stop_flag = false 
+    stop_flag = false
     cmp_lamb = lambda do |val|
-      prev_idx = last_idx
+      puts val
       begin
-        #debugger if val.kind_of? MarkerObject
-        match_item, last_idx = self_enum.next
-      end until found
-      first_idx ||= last_idx
-      res = unless match_enum.end? 
-        nv = if not val.kind_of? AnyNumber or last then
-          puts "next match_enum!" if @debug
-          match_enum.next
-        else
-          puts "stay on match_enum!" if @debug
-          val
-        end
-        cmp_lamb.call(nv)
-      else
-        true
+        begin
+          #debugger if val.kind_of? MarkerObject
+          match_item, last_idx = self_enum.next
+          case match_item
+            when MatchProxy
+              found = cond_comp[match_item,val]
+            else
+              found = cond_comp[match_item,val]
+          end
+        end until found
+        match_enum.end? ? true : cmp_lamb.call(match_enum.next)
+      rescue StopIteration
+        false
       end
-      puts "res = #{res}" if @debug
-      res
     end
 
     mt_found = !!(cmp_lamb.call match_enum.next)
