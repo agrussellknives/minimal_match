@@ -1,5 +1,5 @@
 #necessary sub files
-%w{ match_multiplying anything any_of array_match_data }.each { |mod| require "#{File.dirname(__FILE__)}/#{mod}"}
+%w{ match_multiplying anything any_of array_match_data reversible_enumerator}.each { |mod| require "#{File.dirname(__FILE__)}/#{mod}"}
 
 require 'fiber'
 
@@ -26,8 +26,6 @@ module MinimalMatch
   end
 
   class MatchPattern
-    
-    
     def initialize ma
       @match_array = ma
     end
@@ -37,86 +35,6 @@ module MinimalMatch
         ReversibleEnumerator.new @match_array 
       else
         @match_array.each &block
-      end
-    end
-
-    class ReversibleEnumerator 
-      def initialize obj
-        @peek_mutex = Mutex.new
-        @index = -1 
-        @obj = obj
-        @enum = Enumerator.new do |y|
-          while true
-            if @index < @obj.length
-              raise StopIteration if @index < 0
-              last = @obj[@index]
-              y << last
-              # you called prev on the first position
-              # but you unshifted an item since then
-              if @index < 0
-                newdex = @obj.index(last)
-                raise StopIteration unless newdex
-                @index = newdex - 1
-              end
-            else
-              raise StopIteration
-            end
-          end
-        end
-      end
-
-      def resume
-        @enum.next
-      end
-      private :resume
-
-      def prev
-        @index -= 1
-        resume
-      end
-
-      def next
-        # post add on the first call, preadd on any other call.
-        @index += 1 
-        resume
-      end
-
-      def rewind
-        @index = 0
-      end
-
-      def peek
-        r = nil
-        @peek_mutex.synchronize do
-          @index += 1
-          r = resume
-        end
-        r
-      ensure
-        puts "i ran!"
-        @index -= 1
-        @index = @obj.length - 1 if @index > @obj.length - 1
-      end
-
-      def back_peek
-        r = nil
-        @peek_mutex.synchronize do
-          @index -= 1
-          r = resume
-        end
-        r
-      ensure 
-        puts "i nar!"
-        @index += 1
-        @index = -1 if @index < -1
-      end
-
-      def end?
-        !(!!self.peek) rescue true
-      end
-
-      def begin?
-        !(!!self.back_peek) rescue true
       end
     end
   end
