@@ -3,23 +3,26 @@ require 'fiber'
 # An enumerator that can go forward and backward
 class ReversibleEnumerator 
   # @arguments
+
+  @@valid_methods = [:next,:prev,:rewind,:fast_foward,:peek,:back_peek,:reset]
+
+  attr_reader :obj, :index
+
   def initialize obj, no_duplicate = false
     @index = -1 
-    @obj = no_duplicate ? obj : obj.dup.freeze #if passed the duplicate param then dup the iterable
+    @obj = no_duplicate ? obj : obj.dup #if passed the duplicate param then dup the iterable
     @fiber = Fiber.new(&(method(:__block)))
     @ref_hash = @obj.hash
     @run_once = false
   end
 
   def to_s
-    "#<ReverseEnumerator:#{'%x' % self.__id__ << 1}} #{obj.to_s}"
+    "#<ReversibleEnumerator:#{'%x' % self.__id__ << 1}} #{@obj.to_s}"
   end
 
   def __block op
     while true
       case op
-        when :current
-          op = Fiber.yield @obj[@index]
         when :next
           @index += 1
           op = :yield
@@ -45,6 +48,8 @@ class ReversibleEnumerator
         when :peek_yield
           raise StopIteration unless (0..@obj.length-1).include? pi 
           op = Fiber.yield @obj[pi] 
+        when :reset
+          break
         else
           op = Fiber.yield nil
       end
@@ -59,9 +64,10 @@ class ReversibleEnumerator
   private :__block
 
   def method_missing meth
-    raise MethodNotFound unless [:current,:next,:prev,
-      :rewind,:fast_foward,:peek,:back_peek].include? meth
-   
+    unless @@valid_methods.include? meth
+      raise NoMethodError, "ReversibleEnumerator does not respond to #{meth}"
+    end
+
     if @ref_hash != @obj.hash #our object has changed
       @ref_hash = @obj.hash
       if @last_obj
@@ -78,7 +84,36 @@ class ReversibleEnumerator
    
     @fiber.resume meth
   end
-  
+
+  def grab
+    begin
+      @fiber.resume :reset
+    rescue FiberError
+      @fiber = Fiber.new(&(method(:__block)))
+      retry
+    end
+    true
+  end
+
+  def index= arg
+    if not @fiber.alive?
+      @fiber = Fiber.new(&(method(:__block))) 
+    end
+    @fiber.resume :reset # will raise FiberError if done across a thread
+    @index = arg
+    self.current
+  end
+  alias :[] :index=
+
+  def index
+    raise StopIteration if (0..@obj.length-1).include? @index
+  end
+
+  def current
+    raise StopIteration if (0..@obj.length-1).include? @index
+    @obj[@index]
+  end
+
   def end?
     !(!!self.peek) rescue true
   end

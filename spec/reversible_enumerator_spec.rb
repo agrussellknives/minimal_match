@@ -28,6 +28,13 @@ describe "it's a reversible enumerator" do
     end
   end
 
+  it "can assign an index" do
+    en = ReversibleEnumerator.new @array
+    en.index = 3
+    en.current.should == 4
+    en.next.should == 5
+  end
+
   it "rewinds" do
     en = ReversibleEnumerator.new @array
     loop { en.next }
@@ -93,6 +100,16 @@ describe "it's a reversible enumerator" do
 
   describe "deals with mutable underlying objects" do
 
+    it "can do that even if you didn't start out that way" do
+      @array2 = [1,2,4,5,6]
+      en = ReversibleEnumerator.new @array2
+      en.next.should == 1
+      # oh noes, I forgot the 3
+      en.obj.insert(2,3)
+      en.next.should == 2
+      en.next.should == 3
+    end
+
     it "can account for appending things on the end" do
       arr = @array.dup
       en = ReversibleEnumerator.new arr, :no_duplicate
@@ -126,6 +143,40 @@ describe "it's a reversible enumerator" do
       en.prev.should == 0
     end
 
+    it "can modify the array around the current position" do
+      arr = @array.dup
+      en = ReversibleEnumerator.new arr, :no_duplicate
+      2.times { en.next }
+      en.current.should == 2
+      arr2 = arr.slice!(2..-1)
+      arr.concat [2.5, 2.6, 2.7]
+      arr.concat arr2
+      en.next.should == 2.5
+      en.next.should == 2.6
+      en.next.should == 2.7
+      en.next.should == 3
+      arr.slice!(5..-1)
+      lambda { en.prev }.should raise_error RuntimeError
+    end
+
+    it "supports insert" do
+      arr = @array.dup
+      en = ReversibleEnumerator.new arr, :no_duplicate
+      2.times { en.next }
+      en.current.should == 2 #yeah but it's INDEX 1
+      arr.insert(en.index.succ,'a','b')
+      en.next.should == 'a'
+      en.next.should == 'b'
+    end
+
+    it "supports slice" do
+      arr = @array.dup
+      en = ReversibleEnumerator.new arr, :no_duplicate
+      2.times { en.next }
+      arr.slice!(en.index.succ..-2) #leave the last one
+      en.next.should == 5 
+    end
+
     it "modifiyng the object before iteration is an error" do
       arr = @array.dup
       en = ReversibleEnumerator.new arr, :no_duplicate
@@ -139,7 +190,7 @@ describe "it's a reversible enumerator" do
       en.next.should == 1
       en.current.should == 1
       arr.shift
-      lambda { en.current }.should raise_error RuntimeError
+      lambda { en.next }.should raise_error RuntimeError
     end
   end
 
@@ -155,16 +206,22 @@ describe "it's a reversible enumerator" do
   end
 
   it "won't let you touch it from another thread" do
-    en = ReversibleEnumerator.new @array
+    en2 = nil 
     s = Thread.new do
-      Thread.stop
-      begin
-        en.next
-      rescue e
-        Thread.main.raise e
-      end
+      en2 = ReversibleEnumerator.new @array
+      en2.next
     end
-    s.abort_on_exception == true
-    lambda { s.run }.should raise_error FiberError
+    s.join # ensure it starts on the other thread
+    lambda { en2.next }.should raise_error FiberError
+  end
+
+  it "can't assign index from other thread" do
+    en3 = nil
+    s = Thread.new do
+      en3 = ReversibleEnumerator.new @array
+      en3.next
+    end
+    s.join
+    lambda { en3.index= 3}.should raise_error FiberError
   end
 end

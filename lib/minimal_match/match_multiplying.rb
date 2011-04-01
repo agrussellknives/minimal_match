@@ -64,7 +64,8 @@ module MinimalMatch
 
     private
     def count_class super_class
-      t = self.instance_eval <<-RUBY 
+      ev_obj = ((self.class <=> Singleton) < 0) ? self.class : self
+      t = ev_obj.instance_eval <<-RUBY 
         Class.new(#{super_class}) do
         include Singleton
         attr_accessor :comp_obj

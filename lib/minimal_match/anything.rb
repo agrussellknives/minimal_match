@@ -5,6 +5,7 @@ module MinimalMatch
   class Anything < MinimalMatchObject
     include MatchMultiplying
     # it matches anything OTHER than another minimal matchobject
+   
     def === who_cares
       # i think there is a prettier way to do this with coerce
       # basically Anything is equal to anything OTHER than a different
@@ -24,6 +25,10 @@ module MinimalMatch
 
     def coerce other
       return self, other
+    end
+
+    def comp_obj
+      self
     end
   end
   Anything.__send__ :include, Singleton

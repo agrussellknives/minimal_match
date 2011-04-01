@@ -8,7 +8,7 @@ module MinimalMatch
     end
 
     def initialize(args)
-      @match_arr = args
+      @match_array << args.each { |i| MatchProxy.new i }
     end
 
     def method_missing meth, *args
@@ -25,9 +25,13 @@ module MinimalMatch
 
     def === obj
       @match_arr.each do |m|
-        return true if m == obj
+        return true if m === obj
       end
       false
+    end
+
+    def shift 
+      @match_arr.shift
     end
   end
 
