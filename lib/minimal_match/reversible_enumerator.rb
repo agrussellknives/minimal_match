@@ -13,7 +13,18 @@ class ReversibleEnumerator
     @obj = no_duplicate ? obj : obj.dup #if passed the duplicate param then dup the iterable
     @fiber = Fiber.new(&(method(:__block)))
     @ref_hash = @obj.hash
-    @run_once = false
+    @no_duplicate = no_duplicate
+  end
+
+  def initialize_copy other 
+    if other.instance_eval { @no_duplicate }
+      @obj = other.obj
+    else
+      @obj = other.obj.dup
+    end
+    @fiber = Fiber.new(&(method(:__block)))
+    @ref_hash = @obj.hash
+    @index = other.instance_eval { @index } # don't care if it's out of range
   end
 
   def to_s
@@ -21,6 +32,7 @@ class ReversibleEnumerator
   end
 
   def __block op
+    # it seems like it's this, C, or implementing some kind of aspect
     while true
       case op
         when :next
@@ -60,8 +72,10 @@ class ReversibleEnumerator
       elsif @index < -1
         @index = -1
       end
+    self
   end
   private :__block
+
 
   def method_missing meth
     unless @@valid_methods.include? meth
@@ -101,16 +115,20 @@ class ReversibleEnumerator
     end
     @fiber.resume :reset # will raise FiberError if done across a thread
     @index = arg
+  end
+
+  def [] arg
+    self.index = arg 
     self.current
   end
-  alias :[] :index=
 
   def index
-    raise StopIteration if (0..@obj.length-1).include? @index
+    raise StopIteration unless (0..@obj.length-1).include? @index
+    @index
   end
 
   def current
-    raise StopIteration if (0..@obj.length-1).include? @index
+    raise StopIteration unless (0..@obj.length-1).include? @index
     @obj[@index]
   end
 
@@ -121,5 +139,6 @@ class ReversibleEnumerator
   def begin?
     !(!!self.back_peek) rescue true
   end
+
 end
 

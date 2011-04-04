@@ -1,13 +1,9 @@
 module MinimalMatch
-  class AnyOf < BasicObject
+  class AnyOf < MinimalMatchObject
     include MatchMultiplying
-    class << self
-      def [] *args
-        self.new(args)
-      end
-    end
-
-    def initialize(args)
+    
+    def initialize(*args)
+      @match_array = []
       @match_array << args.each { |i| MatchProxy.new i }
     end
 
@@ -20,23 +16,23 @@ module MinimalMatch
     end
     
     def inspect
-      "#{self.class}:#{@match_arr.to_s}"
+      "#{self.class}:#{@match_array.to_s}"
     end
 
     def === obj
-      @match_arr.each do |m|
+      @match_array.each do |m|
         return true if m === obj
       end
       false
     end
 
     def shift 
-      @match_arr.shift
+      @match_array.shift
     end
   end
 
-  def any_of
-    AnyOf
+  def any_of *args
+    AnyOf.new(*args)
   end
   module_function :any_of
 end

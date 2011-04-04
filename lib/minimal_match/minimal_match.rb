@@ -1,11 +1,12 @@
 #necessary sub files
-%w{ match_multiplying anything any_of array_match_data reversible_enumerator}.each { |mod| require "#{File.dirname(__FILE__)}/#{mod}"}
+%w{ match_multiplying anything any_of match_proxy 
+    array_match_data reversible_enumerator}.each { |mod| require "#{File.dirname(__FILE__)}/#{mod}"}
 
 require 'fiber'
 
-class Enumerator
-  def end?
-    !(!!self.peek) rescue true
+module Kernel
+  def m(val)
+    MinimalMatch::MatchProxy.new(val)
   end
 end
 
@@ -25,28 +26,6 @@ module MinimalMatch
     end
   end
 
-  class MatchProxy < MinimalMatchObject
-    instance_methods.each { |m| undef_method m unless m =~ /^__|include/ } 
-    attr_accessor :comp_obj
-
-    def initialize val
-      @comp_obj = val
-    end
-
-    def is_proxy
-      true
-    end
-
-    def to_s
-      "<#{@comp_obj.to_s} : MatchProxy>"
-    end
-
-    def method_missing meth, *args
-      @comp_obj.__send__ meth, *args
-    end
-  end
-  MatchProxy.__send__ :include, MatchMultiplying
-
   class MarkerObject < MinimalMatchObject
     def initialize val
       super()  #huh
@@ -65,7 +44,9 @@ module MinimalMatch
   end
 
   class End < MarkerObject; end
-  class Begin < MarkerObject; end 
+  class Begin < MarkerObject; end
+
+  def noop; NoOp.instance(); end
     
   def maybe(val); MatchProxy.new(val).maybe; end
   module_function :maybe
@@ -81,27 +62,31 @@ module MinimalMatch
 
   def compile match_array
     is = [] 
-    match_array.each do |mi|
+    match_array.each_with_index do |mi, idx|
       i = is.length
       case mi
         when OneOrMore  # +
           is << [:char, mi.comp_obj]
-          is << [:split, i, i+2]
+          is << (mi.greedy? ? [:split, i, i+2] : [:split, i+2, i])
           is << [:noop]
         when ZeroOrOne  # ?
-          is << [:split, i+1, i+2]
+          is << (mi.greedy? ? [:split, i+1, i+2] : [:split,i+2,i+1])
           is << [:char, mi.comp_obj]
           is << [:noop]
         when ZeroOrMore # *
-          is << [:split, i+1, i+2]
+          is << (mi.greedy? ? [:split, i+1, i+3] : [:split,i+3,i+1])
           is << [:char, mi.comp_obj]
           is << [:jump, i]
           is << [:noop]
-        when AnyOf      # alt
+        when NoOp
+          is << [:noop]
+        when AnyOf
+          is << [:any, mi]
+        when Alternation # alt
           is << [:split, i+1, i+3]
-          is << [:char, compile(mi.shift)]
+          is << [:char, mi.comp_obj]
           is << [:jump, i+4]
-          is << [compile(mi.comp_obj)]
+          is << [:char, mi.alt_obj]
         #simple litterals 
         when MatchProxy, MinimalMatchObject # char
           is << [:char, mi.comp_obj]
@@ -109,8 +94,10 @@ module MinimalMatch
           is << [:char, mi]
       end
     end
+    is << [:match]
     is
   end
+  module_function :compile
 
 
         
@@ -139,9 +126,11 @@ module MinimalMatch
     end
   end
 
-  def =~ match_array
+  def =~ match_array_orig
     @debug = true
     match_self = self.dup #dup self to the local so that we don't mess it up
+    match_array = match_array_orig.dup
+  
    
     puts "comping #{match_self} to #{match_array}"
 
@@ -154,8 +143,10 @@ module MinimalMatch
       case val
         when End
           match_array = match_array[0..match_array.index(val).prev]
+          has_end = true
         when Begin
           match_array = match_array[match_array.index(val).succ..-1]
+          has_begin = true
         when Maybe
           # substract one of the necessary length for a match
           # for each maybe
@@ -165,7 +156,7 @@ module MinimalMatch
     end
     
     unless has_begin
-      match_array.unshift anything.to_a
+      match_array.unshift anything.to_a.non_greedy
     end
 
     unless has_end
@@ -175,15 +166,12 @@ module MinimalMatch
     #if match_self.length < (included_length || match_array.length)
        #return false
     #end
-    debugger
 
     ma = compile match_array
     
     match_enum = ReversibleEnumerator.new ma
     self_enum = ReversibleEnumerator.new match_self 
 
-    first_idx = nil
-    last_idx = nil
 
     cond_comp = lambda do |self_val, comp_val|
       op_sym = (self_val.is_a? Array and comp_val.is_a? Array) ? :=~ : :===
@@ -199,30 +187,58 @@ module MinimalMatch
     
     # what i need to do is only iterate self_enum until the value
     # matches the item immediately after the splat
+    p ma
     stop_flag = false
-    cmp_lamb = lambda do |val,match|
-       case val[0]
-        when :char
-          false unless cond_comp val[1], match
-          cmp_lamb.call match_enum.next, self_enum.next
-        when :noop
-          true
-        when :jump
-          cmp_lamb.call((match_enum.index=val[1]), self_enum.current)
-        when :split
-          if cmp_lamb.call((match_enum.index=val[1]),self_enum.current)
-            true
-          else
-            cmp_lamb.call((match_enum.index=val[2]),self_enum.current)
-          end
-       end
-       #falls off the end
+    first_idx = nil
+    last_idx = nil
+
+    cmp_lamb = lambda do |match_enum,self_enum|
+      p match_enum.current
+      loop do 
+        case match_enum.current[0] 
+         when :char # this is the only code that actually does a comparison
+           break false unless cond_comp[match_enum.current[1], self_enum.current]
+           puts "match at #{self_enum.index}" 
+           first_idx ||= self_enum.index
+           match_enum.next and self_enum.next #advance both
+         when :noop
+           puts "advance match"
+           match_enum.next #advance enumerator, but not match
+           next
+         when :match
+           last_idx = self_enum.index
+           break true
+         when :jump
+           puts "jump match"
+           match_enum[match_enum.current[1]] # set the index
+           next 
+         when :split
+           # branch1
+           puts "splitting"
+           b1 = match_enum.dup # create a new iterator to explore the other branch
+           b1.index = match_enum.current[1]
+           if cmp_lamb[b1,self_enum]
+             break true
+           else
+             match_enum.index = match_enum.current[2]
+             next
+           end
+        end
+      end
     end
 
-    mt_found = !!(cmp_lamb.call match_enum.next, self_enum.next)
-    @first_index = first_idx
-    @last_index = last_idx
-    mt_found
+    match_enum.next and self_enum.next #start
+
+    mt_found = !!(cmp_lamb.call match_enum, self_enum)
+    p match_enum.current
+    
+    debugger
+    1
+
+    true if match_enum.current[0] == :match
+    #@first_index = first_idx
+    #@last_index = last_idx
+    #mt_found
 
   end
 end

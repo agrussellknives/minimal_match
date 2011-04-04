@@ -5,6 +5,19 @@ describe "it's a reversible enumerator" do
     @array = [1,2,3,4,5]
   end
 
+  it "can duplicate itself" do
+    en = ReversibleEnumerator.new @array
+    en2 = en.dup
+    2.times { en.next }
+    en.next.should == 3
+    4.times { en2.next }
+    en2.current.should == 4
+    en2.prev.should == 3
+    en.fast_foward
+    en2 = en.dup
+    lambda { en.next }.should raise_error StopIteration
+  end
+
   it "knows when it's at the beginning or end" do
     en = ReversibleEnumerator.new @array
     loop { en.next }
@@ -107,6 +120,19 @@ describe "it's a reversible enumerator" do
       # oh noes, I forgot the 3
       en.obj.insert(2,3)
       en.next.should == 2
+      en.next.should == 3
+    end
+
+    it "only dups the enumerator itself if you specifiy no_duplicate" do
+      array2 = [1,4,5,6]
+      en = ReversibleEnumerator.new array2, :no_duplicate
+      en2 = en.dup
+      en.next.should == 1
+      en2.next.should == 1
+      en.obj.insert(1,2)
+      en2.next.should == 2
+      en2.obj.insert(2,3)
+      en.next.should == 2 
       en.next.should == 3
     end
 
