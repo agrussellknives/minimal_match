@@ -20,6 +20,7 @@ module MinimalMatch
     end
 
     def === obj
+      # yeah, not right
       @match_array.each do |m|
         return true if m === obj
       end

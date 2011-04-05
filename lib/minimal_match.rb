@@ -39,7 +39,7 @@ module MinimalMatch
     alias :to_s :inspect
   end
   # since you can't look up the module from that scope
-  MinimalMatchObject.send :include, Kernel
+  MinimalMatchObject.send :include, Kernel # so you can raise, etc
 end
 
 require 'minimal_match/minimal_match'

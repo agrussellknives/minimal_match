@@ -23,10 +23,6 @@ module MinimalMatch
     end
     alias :inspect :to_s
 
-    def coerce other
-      return self, other
-    end
-
     def comp_obj
       self
     end

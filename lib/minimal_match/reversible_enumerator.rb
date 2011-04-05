@@ -87,9 +87,10 @@ class ReversibleEnumerator
       if @last_obj
         @index = @obj.index @last_obj
       else
+        #should this be an error?
         raise RuntimeError, "Iterable object modified before enumerator started."
       end
-      raise RuntimeError, "Cannot find current object in Enumerator." if @index.nil?
+      raise RuntimeError, "Cannot find current object in Enumerator." if @index.nil? and (@index = -1)
     end
     
     unless @fiber.alive?
@@ -100,13 +101,14 @@ class ReversibleEnumerator
   end
 
   def grab
+    warn "Point of ReversibleEnumerator subverted!"
     begin
       @fiber.resume :reset
     rescue FiberError
       @fiber = Fiber.new(&(method(:__block)))
       retry
     end
-    true
+    @fiber.alive? ? true : false  # just to be explicit
   end
 
   def index= arg

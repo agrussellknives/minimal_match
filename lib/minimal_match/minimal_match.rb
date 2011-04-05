@@ -46,6 +46,15 @@ module MinimalMatch
   class End < MarkerObject; end
   class Begin < MarkerObject; end
 
+  # you can't access the array "post" from ruby code
+  # so you need this to know when you're at the end of
+  # the array
+  class Sentinel < MinimalMatchObject 
+    def ===
+      false # never equal to anythign
+    end
+  end
+
   def noop; NoOp.instance(); end
     
   def maybe(val); MatchProxy.new(val).maybe; end
@@ -66,17 +75,30 @@ module MinimalMatch
       i = is.length
       case mi
         when OneOrMore  # +
-          is << [:char, mi.comp_obj]
+          is << [:lit, mi.comp_obj]
           is << (mi.greedy? ? [:split, i, i+2] : [:split, i+2, i])
           is << [:noop]
         when ZeroOrOne  # ?
           is << (mi.greedy? ? [:split, i+1, i+2] : [:split,i+2,i+1])
-          is << [:char, mi.comp_obj]
+          is << [:lit, mi.comp_obj]
           is << [:noop]
         when ZeroOrMore # *
           is << (mi.greedy? ? [:split, i+1, i+3] : [:split,i+3,i+1])
-          is << [:char, mi.comp_obj]
+          is << [:lit, mi.comp_obj]
           is << [:jump, i]
+          is << [:noop]
+        when CountedRepetition
+          if mi.range.begin > 0
+            mi.range.begin.times do
+              is << [:lit, mi.comp_obj]
+            end
+          end
+          rem = mi.range.end - mi.range.begin
+          split_len = rem * 2
+          rem.times do |idx|
+            is << [:split, i+idx,i+(rem * 2)]
+            is << [:lit, mi.comp_obj]
+          end
           is << [:noop]
         when NoOp
           is << [:noop]
@@ -84,14 +106,14 @@ module MinimalMatch
           is << [:any, mi]
         when Alternation # alt
           is << [:split, i+1, i+3]
-          is << [:char, mi.comp_obj]
+          is << [:lit, mi.comp_obj]
           is << [:jump, i+4]
-          is << [:char, mi.alt_obj]
+          is << [:lit, mi.alt_obj]
         #simple litterals 
         when MatchProxy, MinimalMatchObject # char
-          is << [:char, mi.comp_obj]
+          is << [:lit, mi.comp_obj]
         else
-          is << [:char, mi]
+          is << [:lit, mi]
       end
     end
     is << [:match]
@@ -119,26 +141,24 @@ module MinimalMatch
   # non-recursively find the index of a pattern matching `pattern`
   #
   def match match_array
-    if self =~ match_array
-      ArrayMatchData.new(self, match_array, @first_index, @last_index)
-    else
-      false
-    end
+    self =~ match_array
+    @last_match || false
   end
 
   def =~ match_array_orig
+    @last_match = false # starts any match operation as false
+
     @debug = true
     match_self = self.dup #dup self to the local so that we don't mess it up
+    match_self << Sentinel.new
     match_array = match_array_orig.dup
   
    
     puts "comping #{match_self} to #{match_array}"
 
-    included_length = false
-
     #there is no need to look past END or before BEGINh
     # ignore thie optimzation for now
-    has_end, has_begin = false
+    has_end, has_begin, has_epsilon = false
     match_array.find_all { |i| i.kind_of? MarkerObject }.each do |val| 
       case val
         when End
@@ -147,13 +167,18 @@ module MinimalMatch
         when Begin
           match_array = match_array[match_array.index(val).succ..-1]
           has_begin = true
-        when Maybe
-          # substract one of the necessary length for a match
-          # for each maybe
-          included_length ||= match_array.length
-          included_length -= 1
+        when Repetition 
+          # zero width assertions will prevent a simple length check
+          # optmization. it's probably possible to figure this
+          # out, but we'll skip it for now
+          has_epsilon = true
       end
     end
+
+    if not has_epsilon and match_self.length < match_array.length
+       return false
+    end
+
     
     unless has_begin
       match_array.unshift anything.to_a.non_greedy
@@ -163,16 +188,15 @@ module MinimalMatch
       match_array.push anything.to_a
     end
 
-    #if match_self.length < (included_length || match_array.length)
-       #return false
-    #end
 
     ma = compile match_array
     
     match_enum = ReversibleEnumerator.new ma
     self_enum = ReversibleEnumerator.new match_self 
 
-
+    
+    # use this function as the comparate to enable
+    # recursive matching.
     cond_comp = lambda do |self_val, comp_val|
       op_sym = (self_val.is_a? Array and comp_val.is_a? Array) ? :=~ : :===
       p "will compare #{self_val} to #{comp_val} using #{op_sym}" if @debug
@@ -185,21 +209,20 @@ module MinimalMatch
       r
     end
     
-    # what i need to do is only iterate self_enum until the value
-    # matches the item immediately after the splat
     p ma
-    stop_flag = false
     first_idx = nil
     last_idx = nil
+    current_match_data = ArrayMatchData.new
 
     cmp_lamb = lambda do |match_enum,self_enum|
       p match_enum.current
       loop do 
         case match_enum.current[0] 
-         when :char # this is the only code that actually does a comparison
+         when :lit # this is the only code that actually does a comparison
            break false unless cond_comp[match_enum.current[1], self_enum.current]
            puts "match at #{self_enum.index}" 
            first_idx ||= self_enum.index
+           raise StopIteration if self_enum.end? 
            match_enum.next and self_enum.next #advance both
          when :noop
            puts "advance match"
@@ -207,7 +230,8 @@ module MinimalMatch
            next
          when :match
            last_idx = self_enum.index
-           break true
+           puts "match state reached!"
+           throw :stop_now #because we don't know how deeply we are nested
          when :jump
            puts "jump match"
            match_enum[match_enum.current[1]] # set the index
@@ -216,8 +240,8 @@ module MinimalMatch
            # branch1
            puts "splitting"
            b1 = match_enum.dup # create a new iterator to explore the other branch
-           b1.index = match_enum.current[1]
-           if cmp_lamb[b1,self_enum]
+           b1.index = match_enum.current[1] #set the index to split location
+           if cmp_lamb[b1,self_enum.dup]
              break true
            else
              match_enum.index = match_enum.current[2]
@@ -228,9 +252,9 @@ module MinimalMatch
     end
 
     match_enum.next and self_enum.next #start
-
-    mt_found = !!(cmp_lamb.call match_enum, self_enum)
-    p match_enum.current
+    catch :stop_now do
+      cmp_lamb.call match_enum, self_enum
+    end
     
     debugger
     1

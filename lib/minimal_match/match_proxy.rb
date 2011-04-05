@@ -1,6 +1,6 @@
 module MinimalMatch
   class MatchProxy < BasicObject 
-    instance_methods.each { |m| undef_method m unless m =~ /^__|include/ }
+    #instance_methods.each { |m| undef_method m unless m =~ /^__|include/ }
     
     attr_accessor :comp_obj
     include MatchMultiplying
@@ -16,7 +16,7 @@ module MinimalMatch
     end
 
     def index_tracker arg
-      @index_track ||= arg
+      @index_tracker ||= arg
     end
 
     def is_proxy?
