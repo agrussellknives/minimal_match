@@ -20,15 +20,16 @@ module MinimalMatch
     end
 
     def === obj
-      # yeah, not right
+      ret = @negated ? false : true
       @match_array.each do |m|
-        return true if m === obj
+        return ret if m === obj
       end
-      false
+      !(ret)
     end
 
-    def shift 
-      @match_array.shift
+    #negated class
+    def !
+      @negated = true
     end
   end
 

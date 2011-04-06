@@ -1,7 +1,17 @@
 require 'singleton'
 
 module MinimalMatch
-  class Repetition #abstract
+
+  # abstrac repetition class
+  class Repetition < MinimalMatchObject 
+
+    def initialize comp_obj, &block
+      # you define a new to_s method for each
+      # subclass whenever you instantiate it
+      instance_eval(&block) if block_given?
+      raise 'oh shit. shitshitshitshit' unless comp_obj.is_proxy?
+      @comp_obj = comp_obj
+    end
     private :initialize
 
     attr_accessor :comp_obj
@@ -29,11 +39,36 @@ module MinimalMatch
     end
   end
 
-  class ZeroOrMore < Repetition; end
-  class OneOrMore < Repetition; end
-  class ZeroOrOne < Repetition; end
+  class ZeroOrMore < Repetition
+    def to_s
+      "*(m(#{@comp_obj}))"
+    end
+  end
+  class OneOrMore < Repetition
+    def to_s 
+      "+(m(#{@comp_obj}))"
+    end
+  end
+  class ZeroOrOne < Repetition
+    def to_s
+      "~(m(#{@comp_obj}))"
+    end
+  end
   class CountedRepetition < Repetition
-    undef :non_greedy #because that makes no sense 
+    attr_reader :range
+    def initialize range, comp_obj, &block
+      super(comp_obj, &block)
+      @range = range
+
+      str_rep = comp_obj.inspect
+      self.define_singleton_method :inspect do
+        "CountedReptitionFor #{str_rep}"
+      end
+      self
+    end
+    def to_s
+      "m(#{@comp_obj.to_s})[#{@range.begin}..#{@range.end}]"
+    end
   end
 
   class NoOp < MinimalMatchObject; end
@@ -46,8 +81,8 @@ module MinimalMatch
       @alt_obj = arg
       @comp_obj = comp_obj
     end
-    def to_s
-      "<#{@comp_obj.to_s} or #{@alt_obj.to_s}"
+    def inspect
+      "<#{@comp_obj.inspect} or #{@alt_obj.inspect}"
     end
     alias :inspect :to_s
   end
@@ -67,27 +102,11 @@ module MinimalMatch
 
     def [] range
       #this is where 2..8 would go
-      unless @rep_obj
-        str_rep = self.to_s
-        @rep_obj = Class.new(CountedRepetition) do
-          attr_reader :range
-          def initialize range, comp_obj
-            @range = range
-            @comp_obj = comp_obj
-          end
-          def to_s
-            "#{@range.begin} to #{@range.end} of #{@comp_obj}"
-          end
+      @rep_obj = CountedRepetition.new range, self do
+        def inspect
+          "#{@range.begin} to #{@range.end} of #{@comp_obj}"
         end
-        # makes your debugging life a bit easier at the
-        # expense of this ugly thing
-        str_rep = self.to_s
-        @rep_obj.define_singleton_method :to_s do
-          "CountedRepetitionFor #{str_rep}"
-        end
-        @rep_obj.send :alias_method, :inspect, :to_s
       end
-      @rep_obj.new range, self.comp_obj
     end
 
 
@@ -106,19 +125,11 @@ module MinimalMatch
 
     private
     def count_class super_class
-      inc_singleton = self.class <=> Singleton # specialized objects like "Anything"
-      ev_obj = (inc_singleton.nil? or inc_singleton < 0) ? self.class : self
-      t = ev_obj.instance_eval <<-RUBY 
-        Class.new(#{super_class}) do
-        include Singleton
-        attr_accessor :comp_obj
-        def to_s
-          "<#{super_class}Matching #{self.comp_obj.to_s} >"
+      super_class.new(self) do 
+        self.define_singleton_method :inspect do
+          "<#{super_class} Matching #{self.comp_obj.inspect} >"
         end
       end
-      RUBY
-      t.instance.comp_obj = self
-      t.instance
     end
   end
 end

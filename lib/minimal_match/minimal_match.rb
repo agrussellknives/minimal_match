@@ -1,50 +1,23 @@
 #necessary sub files
-%w{ match_multiplying anything any_of match_proxy 
+%w{ minimal_match_object match_multiplying match_proxy anything any_of 
     array_match_data reversible_enumerator}.each { |mod| require "#{File.dirname(__FILE__)}/#{mod}"}
 
 require 'fiber'
 
 module Kernel
-  def m(val)
-    MinimalMatch::MatchProxy.new(val)
+  def m(*args)
+    if args.length == 1
+      MinimalMatch::MatchProxy.new(args[0])
+    else
+      MinimalMatch::MatchProxyGroup.new(*args)
+    end
   end
 end
 
 module MinimalMatch
 
-  class MatchGroup < MinimalMatchObject
-    def inspect
-      r = @right
-      string = "<#{self.class}:##{'%x' % self.__id__ << 1} ->"
-      while r
-        string << "#{r.to_s}"
-        r = r.right
-        string << " -> " if r
-      end
-      string << " >"
-      string
-    end
-  end
-
-  class MarkerObject < MinimalMatchObject
-    def initialize val
-      super()  #huh
-      @comp_value = val
-    end
-
-    def === val
-      @comp_value === val
-    end
-    alias :== :===
-
-    def inspect
-      "<#{self.class} == #{@comp_value}>"
-    end
-    alias :to_s :inspect
-  end
-
-  class End < MarkerObject; end
-  class Begin < MarkerObject; end
+  class End < MinimalMatchObject; end
+  class Begin < MinimalMatchObject; end
 
   # you can't access the array "post" from ruby code
   # so you need this to know when you're at the end of
@@ -71,8 +44,9 @@ module MinimalMatch
 
   def compile match_array
     is = [] 
-    match_array.each_with_index do |mi, idx|
+    match_array.each_with_index do |mi|
       i = is.length
+      compile(mi) if mi.is_group?
       case mi
         when OneOrMore  # +
           is << [:lit, mi.comp_obj]
@@ -88,6 +62,10 @@ module MinimalMatch
           is << [:jump, i]
           is << [:noop]
         when CountedRepetition
+          # compiles to a number of literals followed by a number
+          # of zero or ones.  we could probably do this less
+          # explicity using by using redo and rewriting the
+          # match array
           if mi.range.begin > 0
             mi.range.begin.times do
               is << [:lit, mi.comp_obj]
@@ -96,7 +74,7 @@ module MinimalMatch
           rem = mi.range.end - mi.range.begin
           split_len = rem * 2
           rem.times do |idx|
-            is << [:split, i+idx,i+(rem * 2)]
+            is << (mi.greedy? ? [:split, i+idx,i+(rem * 2)] : [:split, i+(rem * 2), i+idx])
             is << [:lit, mi.comp_obj]
           end
           is << [:noop]
@@ -191,9 +169,6 @@ module MinimalMatch
 
     ma = compile match_array
     
-    match_enum = ReversibleEnumerator.new ma
-    self_enum = ReversibleEnumerator.new match_self 
-
     
     # use this function as the comparate to enable
     # recursive matching.
@@ -221,8 +196,6 @@ module MinimalMatch
          when :lit # this is the only code that actually does a comparison
            break false unless cond_comp[match_enum.current[1], self_enum.current]
            puts "match at #{self_enum.index}" 
-           first_idx ||= self_enum.index
-           raise StopIteration if self_enum.end? 
            match_enum.next and self_enum.next #advance both
          when :noop
            puts "advance match"
@@ -250,6 +223,9 @@ module MinimalMatch
         end
       end
     end
+    
+    match_enum = ReversibleEnumerator.new ma
+    self_enum = ReversibleEnumerator.new match_self 
 
     match_enum.next and self_enum.next #start
     catch :stop_now do

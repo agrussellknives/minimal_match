@@ -90,7 +90,11 @@ class ReversibleEnumerator
         #should this be an error?
         raise RuntimeError, "Iterable object modified before enumerator started."
       end
-      raise RuntimeError, "Cannot find current object in Enumerator." if @index.nil? and (@index = -1)
+
+      if @index.nil?
+        @index = -1
+        raise RuntimeError, "Cannot find current object in Enumerator."
+      end
     end
     
     unless @fiber.alive?
