@@ -9,8 +9,9 @@ module MinimalMatch
       # you define a new to_s method for each
       # subclass whenever you instantiate it
       instance_eval(&block) if block_given?
-      raise 'oh shit. shitshitshitshit' unless comp_obj.is_proxy?
+      debugger unless is_proxy? comp_obj
       @comp_obj = comp_obj
+      @is_match_op = true
     end
     private :initialize
 
@@ -25,8 +26,12 @@ module MinimalMatch
         def greedy?
           false
         end
-        def to_s
+        def inspect 
           "#{(super).chop} non-greedily >"
+        end
+        
+        def to_s
+          "#{(super)}.non_greedy"
         end
       end
       ng.instance.comp_obj = self.comp_obj
@@ -78,19 +83,23 @@ module MinimalMatch
     attr_accessor :alt_obj, :comp_obj
     def initialize comp_obj, arg
       super()
+      @is_match_op = true
       @alt_obj = arg
       @comp_obj = comp_obj
     end
     def inspect
       "<#{@comp_obj.inspect} or #{@alt_obj.inspect}"
     end
-    alias :inspect :to_s
+
+    def to_s
+      "m(#{@comp_obj.to_s}) | m(#{@alt_obj.to_s})"
+    end
   end
 
   module Alternate
     def | arg
-      self_equiv, arg_equiv = self.coerce(arg) 
-      Alternation.new(self_equiv.comp_obj, arg_equiv.comp_obj)
+      self_equiv, arg_equiv = self.coerce(arg) unless (is_proxy? arg)
+      Alternation.new(self_equiv, arg_equiv)
     end
   end
 
@@ -108,7 +117,6 @@ module MinimalMatch
         end
       end
     end
-
 
     def +@
       @one_or_more_obj ||= count_class(OneOrMore)

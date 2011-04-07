@@ -1,52 +1,68 @@
 #necessary sub files
+require 'fiber'
+require 'singleton'
+#
 %w{ minimal_match_object match_multiplying match_proxy anything any_of 
     array_match_data reversible_enumerator}.each { |mod| require "#{File.dirname(__FILE__)}/#{mod}"}
 
-require 'fiber'
-
 module Kernel
   def m(*args)
-    if args.length == 1
-      MinimalMatch::MatchProxy.new(args[0])
+    raise ArgumentError, "Wrong number of arguments 0 for ..." if args.empty?
+    if block_given?
+      # can use this to create a matchproxy block 
     else
-      MinimalMatch::MatchProxyGroup.new(*args)
+      if args.length == 1 || args.nil?
+        val = args.nil? ? nil : args[0]
+        MinimalMatch::MatchProxy.new(val)
+      else
+        MinimalMatch::MatchProxyGroup.new(*args)
+      end
     end
   end
 end
 
 module MinimalMatch
 
-  class End < MinimalMatchObject; end
-  class Begin < MinimalMatchObject; end
+  class MarkerObject < MinimalMatchObject
+    # abstract position marker
+    def ===
+      false
+    end
+
+    def to_s
+      #memoize the string value after it's calculated
+      @s_val ||= lambda { self.class.to_s.split('::').last.upcase + '_OBJECT' }.call
+    end
+
+    def inspect
+      self.class
+    end
+
+    private :initialize
+
+  end
+  MarkerObject.__send__ :include, Singleton
+
+  class End < MarkerObject; end
+  class Begin < MarkerObject; end
 
   # you can't access the array "post" from ruby code
   # so you need this to know when you're at the end of
   # the array
-  class Sentinel < MinimalMatchObject 
-    def ===
-      false # never equal to anythign
-    end
-  end
+  class Sentinel < MarkerObject; end 
+  
+  ANYTHING = MinimalMatch::Anything.instance
+  END_OBJECT = MinimalMatch::End.instance
+  BEGIN_OBJECT = MinimalMatch::Begin.instance
+  SENTINEL_OBJECT = MinimalMatch::Sentinel.instance
 
   def noop; NoOp.instance(); end
     
-  def maybe(val); MatchProxy.new(val).maybe; end
-  module_function :maybe
-
-  def ends_with(val); End.new(val); end
-  module_function :ends_with
-
-  def begins_with(val); Begin.new(val); end
-  module_function :begins_with
-
-  def match_proc(&block); MatchProc.new &block; end
-  module_function :match_proc
-
   def compile match_array
     is = [] 
     match_array.each_with_index do |mi|
       i = is.length
-      compile(mi) if mi.is_group?
+      run = compile(mi) if mi.is_group?
       case mi
         when OneOrMore  # +
           is << [:lit, mi.comp_obj]
@@ -65,7 +81,8 @@ module MinimalMatch
           # compiles to a number of literals followed by a number
           # of zero or ones.  we could probably do this less
           # explicity using by using redo and rewriting the
-          # match array
+          # match array to use ZeroOrMore and MatchProxies,
+          # but this is less clever
           if mi.range.begin > 0
             mi.range.begin.times do
               is << [:lit, mi.comp_obj]
@@ -100,24 +117,6 @@ module MinimalMatch
   module_function :compile
 
 
-        
-
-  # a very simple array pattern match for minimal s-exp pjarsing
-  # basically, if your array contains at least yourmatch pattern
-  # then it will match
-  # [a] will match
-  # [a b c]
-  #
-  # [a d] will not
-  #
-  # that's it.
-  #
-  #
-  #
-  #
-  
-  # non-recursively find the index of a pattern matching `pattern`
-  #
   def match match_array
     self =~ match_array
     @last_match || false
@@ -232,13 +231,6 @@ module MinimalMatch
       cmp_lamb.call match_enum, self_enum
     end
     
-    debugger
-    1
-
     true if match_enum.current[0] == :match
-    #@first_index = first_idx
-    #@last_index = last_idx
-    #mt_found
-
   end
 end

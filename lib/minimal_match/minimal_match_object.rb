@@ -1,25 +1,28 @@
 module MinimalMatch
   # provides introspect capabilities for matchobject heirarcy
   class MinimalMatchObject < BasicObject
+    # Abstract
     def class
       class << self
         self.superclass
       end
     end
     
-    def initialize
-      @class_name = self.class.to_s.split('::')[-1].upcase
+    def initialize(klass = nil)
       @ancestry = []
-      superclass = self.class
+      superclass, @klass = klass || self.class
       while superclass do
         @ancestry << superclass if superclass
         superclass = superclass.superclass
       end
       @ancestry.uniq!
     end
+    private :initialize
     
     def kind_of? klass
-      @ancestry.include? klass
+      return true if @ancestry.include? klass
+      return true if @klass.included_modules.include? klass
+      false
     end
 
     def respond_to? meth
@@ -28,15 +31,23 @@ module MinimalMatch
     end
 
     def is_a? klass 
-      self.class == klass
+      @klass == klass
+    end
+
+    # these are not just aliased, because we undef
+    # to_s in the proxy classes
+    def to_s
+      @klass
+    end
+
+    def inspect
+      @klass
     end
     
-    def inspect
-      "<#{@class_name}>"
-    end
-    alias :to_s :inspect
   end
   # since you can't look up the module from that scope
   MinimalMatchObject.send :include, Kernel # so you can raise, etc
+  # enable the is_proxy? test-like-thingy in matchobjects
+  MinimalMatchObject.send :include, MinimalMatch::ProxyOperators
 end 
 #  vim: set ts=2 sw=2 tw=0 :

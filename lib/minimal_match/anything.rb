@@ -19,7 +19,7 @@ module MinimalMatch
     alias :== :===
 
     def to_s
-      "<ANYTHING>"
+      "ANYTHING"
     end
     alias :inspect :to_s
 

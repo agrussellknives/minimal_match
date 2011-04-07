@@ -4,13 +4,21 @@ module MinimalMatch
     attr_accessor :comp_obj
     include MatchMultiplying
     include Alternate
+    undef_method :to_s, :respond_to?, :is_a?, :class
 
-    def initialize
-      super()
+    def initialize klass = nil
+      super(klass)
+      @is_proxy = true #always!
     end
 
-    def is_proxy?
-      true
+    def to_s
+      @comp_obj.to_s
+    end
+
+    def === val
+      # enables classification if we are proxying a class object
+      # doesn't work the other direction.  TFS
+      @comp_obj.__send__ :===, val
     end
 
     private :initialize
@@ -20,37 +28,32 @@ module MinimalMatch
   class MatchProxy < AbstractMatchProxy 
 
     def initialize val
-      super()
+      super(val.class)
       # pass an array into match proxy to create a
       # group
       @comp_obj = val
-      @ancestry.unshift @comp_obj.class
       self
-    end
-    undef_method :to_s, :respond_to?, :is_a?  # you want the proxy to get these
-
-    def real_class
-      @comp_obj.class
     end
 
     def is_group?
       false
     end
     
-    def is_proxy?
-      true
+    #specialcased
+    def nil?
+      @comp_obj.nil? ? true : false
     end
-
+    
     def inspect
       "<#{@comp_obj.to_s} : MatchProxy>"
     end
 
     def coerce arg
-      $stdout.puts "coerce #{arg} to match Proxy"
       return self, MatchProxy.new(arg)
     end
 
     def method_missing meth, *args
+      puts "sent #{meth} with #{args}"
       @comp_obj.__send__ meth, *args
     end
   end
@@ -58,16 +61,24 @@ module MinimalMatch
   class MatchProxyGroup < AbstractMatchProxy 
 
     def initialize *vals
-      super()
-      @comp_obj = vals.map { |v| MatchProxy.new(v) }
+      super(MatchProxyGroup)
+      @comp_obj = vals.map { |v| MatchProxy.new(v) unless is_proxy?(v) or is_match_op?(v) }
       self
     end
     
     def inspect
       str = ""
       @comp_obj.each do |i|
-        str << i.to_s
+        str << i.inspect
       end
+    end
+
+    def to_s
+      str = "m("
+      str << @comp_obj.collect do |i|
+        i.to_s
+      end.join(',')
+      str << ")"
     end
 
     def real_class
@@ -87,7 +98,7 @@ module MinimalMatch
     end
 
     def method_missing meth, *args
-      $stdout.puts "distributing method call to match_obj group"
+      $stdout.puts "distributing method call #{meth} to match_obj group"
       @comp_obj.map do |c|
         c.__send__ meth, *args
       end
