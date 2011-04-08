@@ -59,10 +59,11 @@ module MinimalMatch
   def noop; NoOp.instance(); end
     
   def compile match_array
-    is = [] 
-    match_array.each_with_index do |mi|
+    is = []
+    debugger
+    match_array.each do |mi|
       i = is.length
-      run = compile(mi) if mi.is_group?
+      run = compile(mi) if mi.kind_of? MatchProxyGroup
       case mi
         when OneOrMore  # +
           is << [:lit, mi.comp_obj]

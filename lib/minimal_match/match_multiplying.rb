@@ -8,8 +8,9 @@ module MinimalMatch
     def initialize comp_obj, &block
       # you define a new to_s method for each
       # subclass whenever you instantiate it
+      super()
       instance_eval(&block) if block_given?
-      debugger unless is_proxy? comp_obj
+      raise ::ArgumentError, "repetition support on matchproxy objects only" unless is_proxy? comp_obj
       @comp_obj = comp_obj
       @is_match_op = true
     end
@@ -21,8 +22,7 @@ module MinimalMatch
     end
 
     def non_greedy_class
-      ng = Class.new(self.class) do
-        include Singleton
+      n = ::Class.new(self.class) do
         def greedy?
           false
         end
@@ -34,13 +34,14 @@ module MinimalMatch
           "#{(super)}.non_greedy"
         end
       end
-      ng.instance.comp_obj = self.comp_obj
-      ng.instance
+      ng_name = self.class.to_s.split('::').last.to_s + "NonGreedy"
+      self.class.const_set (ng_name + "NonGreedy").intern, ng_name
     end
     private :non_greedy_class
 
     def non_greedy
       @ng_version ||= non_greedy_class
+      @ng_version.new(@comp_obj)
     end
   end
 
@@ -118,17 +119,26 @@ module MinimalMatch
       end
     end
 
+    # make the non-greedy modifier
+    # a little less particular about parentheses
+    def non_greedy
+      @non_greedy = true
+      self
+    end
+
     def +@
       @one_or_more_obj ||= count_class(OneOrMore)
+      @non_greedy ? @one_or_more_obj.non_greedy : @one_or_more_obj
     end
 
     def ~@
       @one_or_zero_obj ||= count_class(ZeroOrOne) 
+      @non_greedy ? @one_or_zero_obj.non_greedy : @one_or_zero_obj
     end
 
     def to_a
       @zero_or_more_obj ||= count_class(ZeroOrMore)
-      [@zero_or_more_obj] # has to actually return array
+      [@non_greedy ? @zero_or_more_obj.non_greedy : @zero_or_more_obj] # has to actually return array
     end
 
     private

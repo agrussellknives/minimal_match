@@ -2,15 +2,20 @@ module MinimalMatch
   # provides introspect capabilities for matchobject heirarcy
   class MinimalMatchObject < BasicObject
     # Abstract
+    #
+    def MinimalMatchObject.const_missing const
+      puts "#{const} missing in matchobject heir #{const}"
+    end
+
     def class
       class << self
         self.superclass
       end
     end
     
-    def initialize(klass = nil)
+    def initialize(klass=false)
       @ancestry = []
-      superclass, @klass = klass || self.class
+      superclass = @klass = klass || self.class
       while superclass do
         @ancestry << superclass if superclass
         superclass = superclass.superclass
@@ -21,7 +26,9 @@ module MinimalMatch
     
     def kind_of? klass
       return true if @ancestry.include? klass
-      return true if @klass.included_modules.include? klass
+      if (icm = @klass.included_modules) # yes, that's supposed ot be an assignment
+        return true if icm.include? klass
+      end
       false
     end
 

@@ -35,13 +35,13 @@ module MinimalMatch
       self
     end
 
-    def is_group?
-      false
-    end
-    
     #specialcased
     def nil?
       @comp_obj.nil? ? true : false
+    end
+
+    def is_group?
+      false
     end
     
     def inspect
@@ -62,7 +62,9 @@ module MinimalMatch
 
     def initialize *vals
       super(MatchProxyGroup)
-      @comp_obj = vals.map { |v| MatchProxy.new(v) unless is_proxy?(v) or is_match_op?(v) }
+      @comp_obj = vals.collect do |v| 
+        if is_proxy? v or is_match_op? v then v else MatchProxy.new(v) end 
+      end
       self
     end
     
@@ -71,6 +73,10 @@ module MinimalMatch
       @comp_obj.each do |i|
         str << i.inspect
       end
+    end
+    
+    def is_group?
+      true
     end
 
     def to_s
@@ -81,19 +87,20 @@ module MinimalMatch
       str << ")"
     end
 
-    def real_class
-      @comp_obj.map(&:real_class) 
+    # not sure if that's the best way to do this or not
+    def each *args, &block
+      @comp_obj.each *args, &block
     end
 
-    def is_group
-      true
+    def each_with_index *args, &block
+      @comp_obj.each_with_index *args, &block
     end
 
     def coerce arg
       # i don't know if this is what I want to do or not
       $stdout.put "coerce #{arg} for matchproxy group"
       @comp_obj.each_with_object [] do |memo, v|
-        memo << [self, v]
+        memo << v.coerce(arg)
       end
     end
 
