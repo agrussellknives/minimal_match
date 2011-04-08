@@ -1,23 +1,23 @@
 module MinimalMatch
   class AnyOf < MinimalMatchObject
-    include MatchMultiplying
     
     def initialize(*args)
+      super()
       @match_array = []
-      @match_array << args.each { |i| MatchProxy.new i }
+      @match_array.concat(args.each { |i| MatchProxy.new i })
     end
 
-    def method_missing meth, *args
-      nil
-    end
-
-    def class
-      AnyOf
+    def to_s
+      "#{@match_array.to_s}#{".not" if @negated}"
     end
     
     def inspect
-      "#{self.class}:#{@match_array.to_s}"
+      str = self.class.to_s.split('::')
+      str[-1] =str[-1].insert(0,"Not") if @negated
+      str = str.join('::')
+      "#{str}:#{@match_array.to_s}"
     end
+    
 
     def === obj
       ret = @negated ? false : true
@@ -27,15 +27,20 @@ module MinimalMatch
       !(ret)
     end
 
+    def negated?
+      @negated
+    end
+
     #negated class
-    def !
-      @negated = true
+    def not
+      #toggle negated
+      @negated = @negated ? false : true 
+      self
     end
   end
 
-  def any_of *args
+  def any *args
     AnyOf.new(*args)
   end
-  module_function :any_of
 end
 #  vim: set ts=2 sw=2 tw=0 :

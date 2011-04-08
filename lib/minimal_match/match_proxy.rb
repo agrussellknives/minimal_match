@@ -12,7 +12,7 @@ module MinimalMatch
     end
 
     def to_s
-      @comp_obj.to_s
+      "#{@comp_obj.to_s}"
     end
 
     def === val
@@ -28,9 +28,17 @@ module MinimalMatch
   class MatchProxy < AbstractMatchProxy 
 
     def initialize val
-      super(val.class)
+      unless is_proxy? val
+        if val.is_a? ::Array 
+          val = AnyOf.new(*val)
+        end
+        super(val.class)
+      end
       # pass an array into match proxy to create a
       # group
+      while is_proxy? val
+        val = val.comp_obj
+      end
       @comp_obj = val
       self
     end
@@ -43,9 +51,20 @@ module MinimalMatch
     def is_group?
       false
     end
+
+    def to_s
+      if @comp_obj.kind_of? AnyOf and @comp_obj.negated?
+        s = @comp_obj.to_s 
+        s = s.split('.')
+        s = "m(#{s[0]}).#{s[1]}"
+      else
+        s = "m(#{@comp_obj.to_s})"
+      end
+      s
+    end
     
     def inspect
-      "<#{@comp_obj.to_s} : MatchProxy>"
+      "<#{@comp_obj.inspect} : MatchProxy>"
     end
 
     def coerce arg
@@ -54,7 +73,8 @@ module MinimalMatch
 
     def method_missing meth, *args
       puts "sent #{meth} with #{args}"
-      @comp_obj.__send__ meth, *args
+      @comp_obj = @comp_obj.__send__ meth, *args
+      self
     end
   end
 
@@ -82,7 +102,11 @@ module MinimalMatch
     def to_s
       str = "m("
       str << @comp_obj.collect do |i|
-        i.to_s
+        if i.comp_obj.is_a? ::Symbol
+          ":#{i.comp_obj.to_s}"
+        else
+          i.comp_obj.to_s
+        end
       end.join(',')
       str << ")"
     end

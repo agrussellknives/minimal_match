@@ -1,8 +1,22 @@
 require 'minimal_match'
+require 'minimal_match/kernel'
 
-class Array
-  include MinimalMatch
-end
+describe "expression evaluation" do
+    describe "should compile back into a match expression"
+      m(1).to_s.should == 'm(1)'
+      m(1,2,3).to_s.should == 'm(1,2,3)'
+      #gready matchers
+      +m(1).to_s.should == '+(m(1))'
+      ~m(1).to_s.should == '~(m(1))'
+      *m(1).to_s.should == '*(m(1))'
+      -+m(1).to_s.should == '-(+(m(1)))'
+      -~m(1).to_s.should == '-(~(m(1)))'
+      -*m(1).to_s.should == '-(*(m(1)))'
+      m(m(1)|m(2)).to_s.should == 'm(m(1)|m(2))'
+      m(1)[1..5].to_s.should == 'm(1)[1..5]'
+      m([1,2,3]).to_s.should == 'm([1,2,3])'
+      
+      
 
 
 describe "simple array matching" do

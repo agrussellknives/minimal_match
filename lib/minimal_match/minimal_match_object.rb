@@ -42,13 +42,13 @@ module MinimalMatch
     end
 
     # these are not just aliased, because we undef
-    # to_s in the proxy classes
+    # to_s in the proxy classes, but not inspect
     def to_s
-      @klass
+      @klass.to_s
     end
 
     def inspect
-      @klass
+      @klass.to_s
     end
     
   end

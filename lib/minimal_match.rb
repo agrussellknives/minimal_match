@@ -1,4 +1,3 @@
-require 'singleton'
 module MinimalMatch
   module ProxyOperators
     # it's easier to just set this directly on these objects
@@ -14,8 +13,27 @@ module MinimalMatch
     end
   end
   extend ProxyOperators
+
+  def m(*args)
+    raise ArgumentError, "Wrong number of arguments 0 for ..." if args.empty?
+    if block_given?
+      # can use this to create a matchproxy block 
+    else
+      if args.length == 1 || args.nil?
+        val = args.nil? ? nil : args[0]
+        MinimalMatch::MatchProxy.new(val)
+      else
+        MinimalMatch::MatchProxyGroup.new(*args)
+      end
+    end
+  end
+  module_function :m
+    
 end
 
 require 'minimal_match/minimal_match'
 require 'minimal_match/minimal_search'
+
+#remove this!
+require 'minimal_match/kernel'
 

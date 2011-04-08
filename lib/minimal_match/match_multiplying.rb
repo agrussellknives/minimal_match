@@ -20,60 +20,79 @@ module MinimalMatch
     def greedy?
       true
     end
-
-    def non_greedy_class
-      n = ::Class.new(self.class) do
-        def greedy?
-          false
-        end
-        def inspect 
-          "#{(super).chop} non-greedily >"
-        end
-        
-        def to_s
-          "#{(super)}.non_greedy"
-        end
-      end
-      ng_name = self.class.to_s.split('::').last.to_s + "NonGreedy"
-      self.class.const_set (ng_name + "NonGreedy").intern, ng_name
-    end
-    private :non_greedy_class
-
+    
     def non_greedy
-      @ng_version ||= non_greedy_class
-      @ng_version.new(@comp_obj)
+      non_greedy_class.new(@comp_obj)
     end
+    alias :-@ :non_greedy
+
   end
 
-  class ZeroOrMore < Repetition
-    def to_s
-      "*(m(#{@comp_obj}))"
+  # create the reptition operators
+  ops = { ZeroOrMore: '*',
+          OneOrMore: '+',
+          ZeroOrOne: '~' }
+    
+  ops.each_pair do |class_name, op_symbol|
+    greedy = Class.new(Repetition) do
+      define_method :to_s do
+        "#{op_symbol}(m(#{@comp_obj}))"
+      end
+      define_method :non_greedy_class do
+        ::MinimalMatch.const_get class_name.to_s + "NonGreedy"
+      end
+      define_method :inspect do
+        "#{self.class} of #{self.comp_obj.inspect}"
+      end
     end
-  end
-  class OneOrMore < Repetition
-    def to_s 
-      "+(m(#{@comp_obj}))"
+    non_greedy = Class.new(greedy) do
+      define_method :greedy? do
+        false
+      end
+      define_method :to_s do
+        "#{op_symbol}(m(#{@comp_obj})).non_greedy"
+      end
     end
+    self.const_set class_name, greedy
+    self.const_set class_name.to_s + "NonGreedy", non_greedy
   end
-  class ZeroOrOne < Repetition
-    def to_s
-      "~(m(#{@comp_obj}))"
-    end
-  end
+      
+  
+  # not generated because the syntax is a little
+  # different and it take an additional argument
+  # i suppose you could make all of the count
+  # operators subclasses of counted repetition 
+  # if you were feeling ambitious
   class CountedRepetition < Repetition
     attr_reader :range
+    class << self
+      def non_greedy_class
+        CountedRepetitionNonGreedy
+      end
+    end
+      
     def initialize range, comp_obj, &block
       super(comp_obj, &block)
       @range = range
-
-      str_rep = comp_obj.inspect
-      self.define_singleton_method :inspect do
-        "CountedReptitionFor #{str_rep}"
-      end
       self
     end
+
     def to_s
       "m(#{@comp_obj.to_s})[#{@range.begin}..#{@range.end}]"
+    end
+    
+    def inspect 
+      "#{super} #{@range.inspect} of #{@comp_obj.inspect}"
+    end
+  end
+
+  class CountedRepetitionNonGreedy < CountedRepetition
+    def greedy?
+      false
+    end
+    
+    def to_s
+      "-(#{super})"
     end
   end
 
@@ -99,7 +118,12 @@ module MinimalMatch
 
   module Alternate
     def | arg
-      self_equiv, arg_equiv = self.coerce(arg) unless (is_proxy? arg)
+      unless is_proxy? arg
+        self_equiv, arg_equiv = self.coerce(arg) 
+      else
+        self_equiv, arg_equiv = self, arg
+      end
+
       Alternation.new(self_equiv, arg_equiv)
     end
   end
@@ -111,43 +135,51 @@ module MinimalMatch
     end
 
     def [] range
-      #this is where 2..8 would go
-      @rep_obj = CountedRepetition.new range, self do
-        def inspect
-          "#{@range.begin} to #{@range.end} of #{@comp_obj}"
-        end
+      # coerce non ranges into single length range
+      unless range.is_a? Range then
+        r = range.to_i
+        raise TypeError, "could not convert #{range} into Range" unless r > 0
+        range = [r..r]
       end
+      #this is where 2..8 would go
+      cl = @non_greedy ? CountedRepetition.non_greedy_class : CountedRepetition
+      @rep_obj = cl.new range, self
     end
 
     # make the non-greedy modifier
-    # a little less particular about parentheses
+    # less particular about parentheses
     def non_greedy
       @non_greedy = true
+      self
+    end
+    alias :-@ :non_greedy
+
+    def greedy
+      @non_greedy = false
       self
     end
 
     def +@
       @one_or_more_obj ||= count_class(OneOrMore)
-      @non_greedy ? @one_or_more_obj.non_greedy : @one_or_more_obj
+      @one_or_more_obj_non_greedy ||= count_class(OneOrMoreNonGreedy)
+      @non_greedy ? @one_or_more_obj_non_greedy : @one_or_more_obj
     end
 
     def ~@
-      @one_or_zero_obj ||= count_class(ZeroOrOne) 
-      @non_greedy ? @one_or_zero_obj.non_greedy : @one_or_zero_obj
+      @one_or_zero_obj ||= count_class(ZeroOrOne)
+      @one_or_zero_obj_non_greedy ||= count_class(ZeroOrOneNonGreedy) 
+      @non_greedy ? @one_or_zero_obj_non_greedy : @one_or_zero_obj
     end
 
     def to_a
       @zero_or_more_obj ||= count_class(ZeroOrMore)
-      [@non_greedy ? @zero_or_more_obj.non_greedy : @zero_or_more_obj] # has to actually return array
+      @zero_or_more_obj_non_greedy ||= count_class(ZeroOrMoreNonGreedy)
+      [@non_greedy ? @zero_or_more_obj_non_greedy : @zero_or_more_obj] # has to actually return array
     end
 
     private
     def count_class super_class
-      super_class.new(self) do 
-        self.define_singleton_method :inspect do
-          "<#{super_class} Matching #{self.comp_obj.inspect} >"
-        end
-      end
+      super_class.new(self)
     end
   end
 end
