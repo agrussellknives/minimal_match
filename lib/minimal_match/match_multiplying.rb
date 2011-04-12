@@ -36,7 +36,7 @@ module MinimalMatch
   ops.each_pair do |class_name, op_symbol|
     greedy = Class.new(Repetition) do
       define_method :to_s do
-        "#{op_symbol}(m(#{@comp_obj}))"
+        "#{op_symbol}(#{@comp_obj.to_s})"
       end
       define_method :non_greedy_class do
         ::MinimalMatch.const_get class_name.to_s + "NonGreedy"
