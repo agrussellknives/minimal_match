@@ -56,5 +56,27 @@ module MinimalMatch
   MinimalMatchObject.send :include, Kernel # so you can raise, etc
   # enable the is_proxy? test-like-thingy in matchobjects
   MinimalMatchObject.send :include, MinimalMatch::ProxyOperators
+
+  class AbstractMatchProxy < MinimalMatchObject
+    attr_accessor :comp_obj
+    undef_method :to_s, :respond_to?, :is_a?, :class rescue nil
+
+    def initialize klass = nil
+      super(klass)
+      @is_proxy = true #always!
+    end
+
+    def to_s
+      "#{@comp_obj.to_s}"
+    end
+
+    def === val
+      # enables classification if we are proxying a class object
+      # doesn't work the other direction.  TFS
+      @comp_obj.__send__ :===, val
+    end
+    
+    private :initialize
+  end
 end 
 #  vim: set ts=2 sw=2 tw=0 :

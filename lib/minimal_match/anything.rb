@@ -2,7 +2,7 @@ require 'singleton'
 
 module MinimalMatch
 # Array::Anything.  it will always be equal to whatever you compare it to 
-  class Anything < MinimalMatchObject
+  class AnythingClass < MinimalMatchObject
     include MatchMultiplying
     # it matches anything OTHER than another minimal matchobject
    
@@ -19,7 +19,7 @@ module MinimalMatch
     alias :== :===
 
     def to_s
-      "ANYTHING"
+      "Anything"
     end
     alias :inspect :to_s
 
@@ -27,10 +27,10 @@ module MinimalMatch
       self
     end
   end
-  Anything.__send__ :include, Singleton
+  AnythingClass.__send__ :include, Singleton
 
   def anything
-    Anything.instance()
+    AnythingClass.instance()
   end
   module_function :anything
 end

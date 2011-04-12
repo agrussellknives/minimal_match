@@ -2,16 +2,14 @@ require 'singleton'
 
 module MinimalMatch
 
-  # abstrac repetition class
+  # abstract repetition class
   class Repetition < MinimalMatchObject 
-
-    def initialize comp_obj, &block
+    def initialize under_prox, &block
       # you define a new to_s method for each
       # subclass whenever you instantiate it
+      raise ::ArgumentError, "repetition support on matchproxy objects only" unless is_proxy? under_prox 
       super()
-      instance_eval(&block) if block_given?
-      raise ::ArgumentError, "repetition support on matchproxy objects only" unless is_proxy? comp_obj
-      @comp_obj = comp_obj
+      @comp_obj = under_prox 
       @is_match_op = true
     end
     private :initialize
@@ -26,6 +24,10 @@ module MinimalMatch
     end
     alias :-@ :non_greedy
 
+    def method_missing meth, *args
+      puts "sent #{meth} to underlying proxy"
+      @comp_obj.__send__ meth, *args
+    end
   end
 
   # create the reptition operators
@@ -50,7 +52,7 @@ module MinimalMatch
         false
       end
       define_method :to_s do
-        "#{op_symbol}(m(#{@comp_obj})).non_greedy"
+        "#{super()}.non_greedy"
       end
     end
     self.const_set class_name, greedy
@@ -65,11 +67,22 @@ module MinimalMatch
   # if you were feeling ambitious
   class CountedRepetition < Repetition
     attr_reader :range
+    
+    # yeah, it can actually be called either way 
     class << self
       def non_greedy_class
         CountedRepetitionNonGreedy
       end
     end
+
+    def non_greedy_class
+      CountedRepetitionNonGreedy
+    end
+    
+    def non_greedy
+      non_greedy_class.new(@range, @comp_obj)
+    end
+    alias :-@ :non_greedy
       
     def initialize range, comp_obj, &block
       super(comp_obj, &block)
@@ -78,7 +91,7 @@ module MinimalMatch
     end
 
     def to_s
-      "m(#{@comp_obj.to_s})[#{@range.begin}..#{@range.end}]"
+      "#{@comp_obj.to_s}[#{@range.begin}..#{@range.end}]"
     end
     
     def inspect 
@@ -92,29 +105,12 @@ module MinimalMatch
     end
     
     def to_s
-      "-(#{super})"
+      "#{super}.non_greedy"
     end
   end
 
   class NoOp < MinimalMatchObject; end
   NoOp.__send__ :include, Singleton
-
-  class Alternation < MinimalMatchObject
-    attr_accessor :alt_obj, :comp_obj
-    def initialize comp_obj, arg
-      super()
-      @is_match_op = true
-      @alt_obj = arg
-      @comp_obj = comp_obj
-    end
-    def inspect
-      "<#{@comp_obj.inspect} or #{@alt_obj.inspect}"
-    end
-
-    def to_s
-      "m(#{@comp_obj.to_s}) | m(#{@alt_obj.to_s})"
-    end
-  end
 
   module Alternate
     def | arg
@@ -128,7 +124,31 @@ module MinimalMatch
     end
   end
 
-  module MatchMultiplying
+ class Alternation < MinimalMatchObject
+    include Alternate
+    attr_accessor :alt_obj, :comp_obj
+    def initialize comp_obj, arg
+      super()
+      @is_match_op = true
+      @alt_obj = arg
+      @comp_obj = comp_obj
+    end
+
+    # because it takes up more than single instruction
+    def is_group?
+      true
+    end
+
+    def inspect
+      "<#{@comp_obj.inspect} or #{@alt_obj.inspect}"
+    end
+
+    def to_s
+      "#{@comp_obj.to_s}|#{@alt_obj.to_s}"
+    end
+  end
+
+ module MatchMultiplying
 
     def * num
       self[num..num]
@@ -152,7 +172,7 @@ module MinimalMatch
       @non_greedy = true
       self
     end
-    alias :-@ :non_greedy
+    alias :! :non_greedy
 
     def greedy
       @non_greedy = false
@@ -182,5 +202,13 @@ module MinimalMatch
       super_class.new(self)
     end
   end
+
+
+  # include these module in the abstract matchproxy
+  AbstractMatchProxy.__send__ :include, ::MinimalMatch::MatchMultiplying
+  AbstractMatchProxy.__send__ :include, ::MinimalMatch::Alternate
 end
+
+# mix these modules into the match proxy
+
 #  vim: set ts=2 sw=2 tw=0 :

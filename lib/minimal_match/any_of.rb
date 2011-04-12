@@ -8,7 +8,13 @@ module MinimalMatch
     end
 
     def to_s
-      "#{@match_array.to_s}#{".not" if @negated}"
+      str = "["
+      str << @match_array.collect do |i|
+        i.to_s
+      end.join(",")
+      str << "]"
+      str = "m(#{str}).not" if @negated
+      str
     end
     
     def inspect

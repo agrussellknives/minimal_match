@@ -2,7 +2,7 @@
 require 'fiber'
 require 'singleton'
 #
-%w{ minimal_match_object match_multiplying match_proxy anything any_of 
+%w{ minimal_match_object match_proxy match_multiplying anything any_of 
     array_match_data reversible_enumerator}.each { |mod| require "#{File.dirname(__FILE__)}/#{mod}"}
 
 module MinimalMatch
@@ -15,7 +15,7 @@ module MinimalMatch
 
     def to_s
       #memoize the string value after it's calculated
-      @s_val ||= lambda { self.class.to_s.split('::').last.upcase + '_OBJECT' }.call
+      @s_val ||= lambda { self.class.gsub("Class",'') }.call
     end
 
     def inspect
@@ -27,38 +27,55 @@ module MinimalMatch
   end
   MarkerObject.__send__ :include, Singleton
 
-  class End < MarkerObject; end
-  class Begin < MarkerObject; end
+  class EndClass < MarkerObject; end
+  class BeginClass < MarkerObject; end
 
   # you can't access the array "post" from ruby code
   # so you need this to know when you're at the end of
   # the array
-  class Sentinel < MarkerObject; end 
+  class SentinelClass < MarkerObject; end 
   
-  ANYTHING = MinimalMatch::Anything.instance
-  END_OBJECT = MinimalMatch::End.instance
-  BEGIN_OBJECT = MinimalMatch::Begin.instance
-  SENTINEL_OBJECT = MinimalMatch::Sentinel.instance
+  Anything = MinimalMatch::AnythingClass.instance
+  End = MinimalMatch::EndClass.instance
+  Begin = MinimalMatch::BeginClass.instance
+  Sentinel = MinimalMatch::SentinelClass.instance
 
   def noop; NoOp.instance(); end
     
   def compile match_array
     is = []
+    $stdout << match_array.to_s
+    $stdout << match_array.class
+    $stdout << "\n"
+
     match_array.each do |mi|
       i = is.length
-      run = compile(mi) if mi.kind_of? MatchProxyGroup
+      len = 1
+      $stdout << mi.to_s
+      $stdout << "\n"
+      run = []
+      if mi.is_group?
+        run << [:save, mi.bind_name || @bind_index || 0]
+        tl = compile(mi.to_ary)
+        tl.pop # remove the last match instruction
+        len = tl.length
+        run.concat tl
+      else
+        run << [:lit, mi.comp_obj]
+      end
+
       case mi
         when OneOrMore  # +
-          is << [:lit, mi.comp_obj]
-          is << (mi.greedy? ? [:split, i, i+2] : [:split, i+2, i])
+          is.concat run
+          is << (mi.greedy? ? [:split, i, i+(len+1)] : [:split, i+(len+1), i])
           is << [:noop]
         when ZeroOrOne  # ?
-          is << (mi.greedy? ? [:split, i+1, i+2] : [:split,i+2,i+1])
-          is << [:lit, mi.comp_obj]
+          is << (mi.greedy? ? [:split, i+1, i+(len+1)] : [:split,i+(len+1),i+1])
+          is.concat run
           is << [:noop]
         when ZeroOrMore # *
-          is << (mi.greedy? ? [:split, i+1, i+3] : [:split,i+3,i+1])
-          is << [:lit, mi.comp_obj]
+          is << (mi.greedy? ? [:split, i+1, i+(len+2)] : [:split,i+(len+2),i+1])
+          is.concat run
           is << [:jump, i]
           is << [:noop]
         when CountedRepetition
@@ -69,28 +86,31 @@ module MinimalMatch
           # but this is less clever
           if mi.range.begin > 0
             mi.range.begin.times do
-              is << [:lit, mi.comp_obj]
+              is.concat run
             end
           end
           rem = mi.range.end - mi.range.begin
-          split_len = rem * 2
+          split_len = rem * run 
           rem.times do |idx|
-            is << (mi.greedy? ? [:split, i+idx,i+(rem * 2)] : [:split, i+(rem * 2), i+idx])
-            is << [:lit, mi.comp_obj]
+            is << (mi.greedy? ? [:split, i+idx,i+split_len] : [:split, i+split_len, i+idx])
+            is.concat run
           end
           is << [:noop]
         when NoOp
           is << [:noop]
         when AnyOf
+          # any is a special instruction rather than a compliation 
+          # of alternations
           is << [:any, mi]
         when Alternation # alt
           is << [:split, i+1, i+3]
+          # todo  - fix this
           is << [:lit, mi.comp_obj]
           is << [:jump, i+4]
           is << [:lit, mi.alt_obj]
         #simple litterals 
         when MatchProxy, MinimalMatchObject # char
-          is << [:lit, mi.comp_obj]
+          is.concat run 
         else
           is << [:lit, mi]
       end
@@ -107,6 +127,7 @@ module MinimalMatch
   end
 
   def =~ match_array_orig
+    @bind_index = 0 
     @last_match = false # starts any match operation as false
 
     @debug = true
@@ -148,7 +169,6 @@ module MinimalMatch
     unless has_end
       match_array.push anything.to_a
     end
-
 
     ma = compile match_array
     

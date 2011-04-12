@@ -2,21 +2,95 @@ require 'minimal_match'
 require 'minimal_match/kernel'
 
 describe "expression evaluation" do
-    describe "should compile back into a match expression"
-      m(1).to_s.should == 'm(1)'
-      m(1,2,3).to_s.should == 'm(1,2,3)'
-      #gready matchers
-      +m(1).to_s.should == '+(m(1))'
-      ~m(1).to_s.should == '~(m(1))'
-      *m(1).to_s.should == '*(m(1))'
-      -+m(1).to_s.should == '-(+(m(1)))'
-      -~m(1).to_s.should == '-(~(m(1)))'
-      -*m(1).to_s.should == '-(*(m(1)))'
-      m(m(1)|m(2)).to_s.should == 'm(m(1)|m(2))'
-      m(1)[1..5].to_s.should == 'm(1)[1..5]'
-      m([1,2,3]).to_s.should == 'm([1,2,3])'
+  it "compile simple match expression" do
+    me = m(1)
+    me.to_s.should == 'm(1)'
+    eval(me.to_s).inspect.should == m(1).inspect
+  end
+
+  it "compile grouped match expression" do
+    me = m(1,2,3)
+    me.to_s.should == 'm(1,2,3)'
+    eval(me.to_s).inspect.should == m(1,2,3).inspect
+  end
+
+  it "compile nested group expression" do
+    me = m(1,m(2,3))
+    me.to_s.should == 'm(1,m(2,3))'
+    eval(me.to_s).inspect.should == m(1,m(2,3)).inspect
+  end
+
+  describe "should compile greedy matchers" do
+    it "should do one or more" do
+      me = +(m(1,2))
+      me.to_s.should == '+(m(1,2))'
+      eval(me.to_s).inspect.should == (+(m(1,2))).inspect
+    end
+   
+    it "should do zero or one" do
+      me = ~(m(1,2))
+      me.to_s.should == '~(m(1,2))'
+      eval(me.to_s).inspect.should == (~(m(1,2))).inspect
+    end
+
+    it "should do zero or more" do
+      # this is complicated by that the fact that the
+      # * expander only works within an array
+      # in practice, you always pass an array as a the 
+      # match pattern, but it looks sort of weird as a test
+      me = [*(m(1,2))]
+      me[0].to_s.should == '*(m(1,2))'
+      eval("[#{me[0].to_s}]").inspect.should == [*(m(1,2))].inspect
+    end
+
+    it "should do counted ranges" do
+      me = m(1)[1..5]
+      me.to_s.should == 'm(1)[1..5]'
+      eval(me.to_s).inspect.should == m(1)[1..5].inspect
+    end
+
+    it "specific number shortcut" do
+      me = m(1)*4
+      me.to_s.should == 'm(1)[4..4]'
+    end
+ end
+
+ describe "should compile non-greedy matchers" do
+    it "should do one or more" do
+      me = +(m(1,2)).non_greedy
+      me.to_s.should == '+(m(1,2)).non_greedy'
+      eval(me.to_s).inspect.should == (+(m(1,2))).non_greedy.inspect
+    end
+
+    it "should do zero or one" do
+      me = ~(m(1,2)).non_greedy
+      me.to_s.should == '~(m(1,2)).non_greedy'
+      eval(me.to_s).inspect.should == (~(m(1,2))).non_greedy.inspect
+    end
+
+    it "should do zero or more" do
+      me = [*(m(1,2)).non_greedy]
+      me[0].to_s.should == '*(m(1,2)).non_greedy'
+      eval("[#{me[0].to_s}]").inspect.should == [*(m(1,2)).non_greedy].inspect
+    end
+
+    it "counted ranges non-greedy" do
+      me = m(1)[1..5].non_greedy
+      me.to_s.should == 'm(1)[1..5].non_greedy'
+      eval(me.to_s).inspect.should == m(1)[1..5].non_greedy.inspect
+    end
+  end
       
-      
+  it "should compile alteration" do 
+    me = m(1)|m(2)
+    me.to_s.should == 'm(1)|m(2)'
+    eval(me.to_s).inspect.should == (m(1)|m(2)).inspect
+
+    me = m(1)|m(2)|m(3,4,5)
+    me.to_s.should == 'm(1)|m(2)|m(3,4,5)'
+    eval(me.to_s).inspect.should == (m(1)|m(2)|m(3,4,5)).inspect
+  end
+end
 
 
 describe "simple array matching" do
