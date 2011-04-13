@@ -50,7 +50,12 @@ module MinimalMatch
     
     match_array.each do |mi|
       i = is.length
-      is.concat mi.compile(i)
+      if mi.respond_to? :compile
+        r = mi.compile(i)
+      else
+        r = MatchCompile.compile(i,mi)
+      end
+      is.concat r 
     end
     is << [:match]
     is

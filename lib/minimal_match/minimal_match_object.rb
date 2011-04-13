@@ -21,6 +21,8 @@ module MinimalMatch
         end
       end
     end
+    module_function :compile
+    public :compile
   end
 
   # provides introspect capabilities for matchobject heirarcy
