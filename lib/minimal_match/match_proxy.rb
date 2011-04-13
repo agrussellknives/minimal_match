@@ -3,15 +3,15 @@ module MinimalMatch
   class MatchProxy < AbstractMatchProxy 
 
     def initialize val
-      unless is_proxy? val
+      if not is_proxy? val
+        # pass a single array into a matchproxy
+        # construction to create a "character class"
         if val.is_a? ::Array 
           val = AnyOf.new(*val)
         end
-      end
-      super(val.class)
-      # pass an array into match proxy to create a
-      # group
-      while is_proxy? val
+        super(val.class)
+      else
+        super(val.comp_obj.class)
         val = val.comp_obj
       end
       @comp_obj = val
@@ -48,9 +48,9 @@ module MinimalMatch
     end
 
     def method_missing meth, *args
-      puts "sent #{meth} with #{args}"
+      puts "sent #{meth} with #{args} from #{__sender__}::#{__caller__}"
       res = @comp_obj.__send__ meth, *args
-      MatchProxy.new(res)
+      if is_proxy? res then res else MatchProxy.new(res) end # return a new proxy object
     end
   end
 
@@ -101,13 +101,35 @@ module MinimalMatch
     def to_ary
       @comp_obj
     end
+
+    def _compile bind_index = nil
+      puts "compile with #{bind_index} from #{__sender__}::#{__caller__}"
+      run = [[:save, @bind_name || bind_index ]] # replace this with bind_index
+      @comp_obj.each_with_index.each_with_object(run) do |(mi, idx), memo|
+        $stdout << <<-INFO
+          memo : #{memo.to_s}
+          mi : #{mi.to_s}
+          idx : #{idx.to_s}
+        INFO
+        if is_match_op? mi # match objects automaticall start in an array
+          memo.concat mi.compile(bind_index+idx+1)
+        else
+          memo << mi.compile(bind_index+idx+1)
+        end
+      end
+      run
+    end
+
+    def respond_to_missing? meth, *args
+      puts "respond to missing from match proxy group"
+    end
     
     def method_missing meth, *args
       $stdout.puts "distributing method call #{meth} to match_obj group"
       v = @comp_obj.map do |c|
         c.__send__ meth, *args
       end
-      MatchProxyGroup.new(v)
+      MatchProxyGroup.new(*v)
     end
   end
 end

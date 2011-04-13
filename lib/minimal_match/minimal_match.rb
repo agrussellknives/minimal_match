@@ -47,73 +47,10 @@ module MinimalMatch
     $stdout << match_array.to_s
     $stdout << match_array.class
     $stdout << "\n"
-
+    
     match_array.each do |mi|
       i = is.length
-      len = 1
-      $stdout << mi.to_s
-      $stdout << "\n"
-      run = []
-      if mi.is_group?
-        run << [:save, mi.bind_name || @bind_index || 0]
-        tl = compile(mi.to_ary)
-        tl.pop # remove the last match instruction
-        len = tl.length
-        run.concat tl
-      else
-        run << [:lit, mi.comp_obj]
-      end
-
-      case mi
-        when OneOrMore  # +
-          is.concat run
-          is << (mi.greedy? ? [:split, i, i+(len+1)] : [:split, i+(len+1), i])
-          is << [:noop]
-        when ZeroOrOne  # ?
-          is << (mi.greedy? ? [:split, i+1, i+(len+1)] : [:split,i+(len+1),i+1])
-          is.concat run
-          is << [:noop]
-        when ZeroOrMore # *
-          is << (mi.greedy? ? [:split, i+1, i+(len+2)] : [:split,i+(len+2),i+1])
-          is.concat run
-          is << [:jump, i]
-          is << [:noop]
-        when CountedRepetition
-          # compiles to a number of literals followed by a number
-          # of zero or ones.  we could probably do this less
-          # explicity using by using redo and rewriting the
-          # match array to use ZeroOrMore and MatchProxies,
-          # but this is less clever
-          if mi.range.begin > 0
-            mi.range.begin.times do
-              is.concat run
-            end
-          end
-          rem = mi.range.end - mi.range.begin
-          split_len = rem * run 
-          rem.times do |idx|
-            is << (mi.greedy? ? [:split, i+idx,i+split_len] : [:split, i+split_len, i+idx])
-            is.concat run
-          end
-          is << [:noop]
-        when NoOp
-          is << [:noop]
-        when AnyOf
-          # any is a special instruction rather than a compliation 
-          # of alternations
-          is << [:any, mi]
-        when Alternation # alt
-          is << [:split, i+1, i+3]
-          # todo  - fix this
-          is << [:lit, mi.comp_obj]
-          is << [:jump, i+4]
-          is << [:lit, mi.alt_obj]
-        #simple litterals 
-        when MatchProxy, MinimalMatchObject # char
-          is.concat run 
-        else
-          is << [:lit, mi]
-      end
+      is.concat mi.compile(i)
     end
     is << [:match]
     is

@@ -1,4 +1,5 @@
 require 'singleton'
+require 'sender'
 
 module MinimalMatch
 
@@ -22,20 +23,60 @@ module MinimalMatch
     def non_greedy
       non_greedy_class.new(@comp_obj)
     end
-    alias :-@ :non_greedy
+
+    def greedy
+      greedy_class.new(@comp_obj)
+    end
+
+    def !
+      if greedy? then non_greedy else greedy end
+    end
 
     def method_missing meth, *args
-      puts "sent #{meth} to underlying proxy"
+      # for some reason __sender__ chokes this
+      puts "sent #{__method__} with #{args.to_s} from #{__caller__} from group underproxy"
       @comp_obj.__send__ meth, *args
     end
   end
 
   # create the reptition operators
-  ops = { ZeroOrMore: '*',
-          OneOrMore: '+',
-          ZeroOrOne: '~' }
-    
-  ops.each_pair do |class_name, op_symbol|
+  # this is one time when i wish ruby had macros,
+  # because this is actually pretty fucking confusing.
+  # I guess I could take up four times as much
+  # code by writing this all explicitly - but it seems
+  # wrong seems like candidate for refactor
+  ops = {
+  ZeroOrMore: {
+    :op_symbol => '*',
+    :compile_proc => lambda { |i,block|
+      run = []
+      tl = @comp_obj.compile(i)
+      run << block.call(i+1,i+tl.length+2)
+      run.concat tl 
+      run << [:jump, i]
+      run << [:noop]
+  }},
+  OneOrMore: {
+    :op_symbol => '+',
+    :compile_proc => lambda { |i,block|
+      run = []
+      tl = @comp_obj.compile(i)
+      run.concat tl
+      run << block.call(i,i+tl.length+1)
+      run << [:noop]
+  }},
+  ZeroOrOne: {
+    :op_symbol => '~',
+    :compile_proc => lambda { |i,block|
+      run = []
+      tl = @comp_obj.compile(i)
+      run << block.call(i+1,i+tl.length+1)
+      run.concat tl
+      run << [:noop]
+  }}}
+     
+  ops.each do |class_name, values|
+    op_symbol, compile_proc = values.values
     greedy = Class.new(Repetition) do
       define_method :to_s do
         "#{op_symbol}(#{@comp_obj.to_s})"
@@ -46,19 +87,30 @@ module MinimalMatch
       define_method :inspect do
         "#{self.class} of #{self.comp_obj.inspect}"
       end
+      define_method :_compile do |i|
+        instance_exec i, lambda { |idx,len| [:split,idx,len] }, &compile_proc
+      end
     end
     non_greedy = Class.new(greedy) do
       define_method :greedy? do
         false
       end
+      define_method :greedy_class do
+        greedy
+      end
       define_method :to_s do
         "#{super()}.non_greedy"
+      end
+      define_method :_compile do |i| 
+        instance_exec i, lambda { |idx,len| [:split,len,idx] }, &compile_proc
       end
     end
     self.const_set class_name, greedy
     self.const_set class_name.to_s + "NonGreedy", non_greedy
   end
-      
+  
+
+  
   
   # not generated because the syntax is a little
   # different and it take an additional argument
@@ -67,7 +119,7 @@ module MinimalMatch
   # if you were feeling ambitious
   class CountedRepetition < Repetition
     attr_reader :range
-    
+   
     # yeah, it can actually be called either way 
     class << self
       def non_greedy_class
@@ -90,6 +142,26 @@ module MinimalMatch
       self
     end
 
+    def _compile idx = nil
+      run = []
+      # rewrite the subexpression to a number of literals
+      # followed by a number of zero or ones
+      subexpression = []
+
+      if @range.begin > 0
+        @range.begin.times do
+          subexpression << @comp_obj #comp_obj is always a proxy
+        end
+      end
+
+      remaining = @range.end - @range.begin
+      remaining.times do
+        subexpression << greedy? ? ~(@comp_obj) : ~!(@comp_obj)
+      end
+    
+      subexpression.compile(idx)
+    end
+
     def to_s
       "#{@comp_obj.to_s}[#{@range.begin}..#{@range.end}]"
     end
@@ -103,7 +175,7 @@ module MinimalMatch
     def greedy?
       false
     end
-    
+
     def to_s
       "#{super}.non_greedy"
     end
@@ -125,7 +197,8 @@ module MinimalMatch
   end
 
  class Alternation < MinimalMatchObject
-    include Alternate
+    include Alternate #so you can stack them
+
     attr_accessor :alt_obj, :comp_obj
     def initialize comp_obj, arg
       super()
@@ -145,6 +218,24 @@ module MinimalMatch
 
     def to_s
       "#{@comp_obj.to_s}|#{@alt_obj.to_s}"
+    end
+
+    def _compile idx = nil
+      run = []
+      br_1idx = idx + 1
+      brch_1 = @comp_obj.compile(br_1idx) 
+      brch_1 = [brch_1] unless @comp_obj.is_group?
+      
+      br_2idx = brch_1.length + 2
+      brch_2 = @alt_obj.compile(br_2idx) 
+      brch_2 = [brch_2] unless @alt_obj.is_group?
+
+      run << [:split, idx + 1, idx+brch_1.length+2] #plus jump and split instructions
+      run.concat brch_1
+      run << [:jump, idx + brch_1.length + 1 + brch_2.length + 1] #end of the alternation
+      run.concat brch_2
+      run << [:noop]
+      run
     end
   end
 
@@ -172,11 +263,19 @@ module MinimalMatch
       @non_greedy = true
       self
     end
-    alias :! :non_greedy
 
+    #aliasing this doesn't work
     def greedy
       @non_greedy = false
       self
+    end
+
+    def greedy?
+      !(@non_greedy)
+    end
+
+    def !
+      if @non_greedy then greedy else non_greedy end
     end
 
     def +@
