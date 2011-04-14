@@ -4,7 +4,12 @@ module MinimalMatch
 # Array::Anything.  it will always be equal to whatever you compare it to 
   class AnythingClass < MinimalMatchObject
     include MatchMultiplying
+    include Alternate
     # it matches anything OTHER than another minimal matchobject
+    #
+    def initialize
+      @is_proxy = true #sure
+    end
    
     def === who_cares
       # i think there is a prettier way to do this with coerce

@@ -38,15 +38,13 @@ module MinimalMatch
     end
 
     #negated class
+    # there is no ! operator because we're using
+    # it for non-greedy
     def not
       #toggle negated
       @negated = @negated ? false : true 
       self
     end
-  end
-
-  def any *args
-    AnyOf.new(*args)
   end
 end
 #  vim: set ts=2 sw=2 tw=0 :

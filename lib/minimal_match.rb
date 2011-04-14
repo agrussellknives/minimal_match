@@ -11,6 +11,10 @@ module MinimalMatch
     def is_match_op? obj
       obj.instance_variable_get :@is_match_op
     end
+
+    def is_group? obj
+      obj.instance_variable_get :@is_group
+    end
   end
   extend ProxyOperators
 

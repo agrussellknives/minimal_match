@@ -10,8 +10,7 @@ module MinimalMatch
       begin
         self._compile(at_index || 0)
       rescue NoMethodError => e
-        # i'm not actually sure this still needs to be here
-        puts e
+        raise e unless e.name == :_compile #pass any other exception
         if obj and is_proxy? obj
           [:lit, obj.comp_obj]
         elsif not obj and is_proxy? self
@@ -24,6 +23,7 @@ module MinimalMatch
     module_function :compile
     public :compile
   end
+  MatchCompile.extend MinimalMatch::ProxyOperators
 
   # provides introspect capabilities for matchobject heirarcy
   class MinimalMatchObject < BasicObject
@@ -49,7 +49,7 @@ module MinimalMatch
       @ancestry.uniq!
     end
     private :initialize
-    
+
     def kind_of? klass
       return true if @ancestry.include? klass
       if (icm = @klass.included_modules) # yes, that's supposed ot be an assignment

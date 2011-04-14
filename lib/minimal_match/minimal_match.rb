@@ -23,7 +23,6 @@ module MinimalMatch
     end
 
     private :initialize
-
   end
   MarkerObject.__send__ :include, Singleton
 
@@ -44,18 +43,15 @@ module MinimalMatch
     
   def compile match_array
     is = []
-    $stdout << match_array.to_s
-    $stdout << match_array.class
-    $stdout << "\n"
-    
+
     match_array.each do |mi|
       i = is.length
       if mi.respond_to? :compile
-        r = mi.compile(i)
+        is.concat(mi.compile(i))
       else
-        r = MatchCompile.compile(i,mi)
+        # so it's just a standard object
+        is << MatchCompile.compile(i,mi)
       end
-      is.concat r 
     end
     is << [:match]
     is
@@ -74,7 +70,7 @@ module MinimalMatch
 
     @debug = true
     match_self = self.dup #dup self to the local so that we don't mess it up
-    match_self << Sentinel.new
+    match_self << Sentinel
     match_array = match_array_orig.dup
   
    
@@ -105,12 +101,14 @@ module MinimalMatch
 
     
     unless has_begin
-      match_array.unshift anything.to_a.non_greedy
+      match_array.unshift MatchProxy.new(Anything).non_greedy.to_a
     end
 
     unless has_end
-      match_array.push anything.to_a
+      match_array.push MatchProxy.new(Anything).to_a
     end
+    
+    match_array.inspect 
 
     ma = compile match_array
     
@@ -133,36 +131,49 @@ module MinimalMatch
     first_idx = nil
     last_idx = nil
     current_match_data = ArrayMatchData.new
+    match_hash = {}
 
     cmp_lamb = lambda do |match_enum,self_enum|
       p match_enum.current
-      loop do 
-        case match_enum.current[0] 
+      loop do
+        op, *args = match_enum.current
+        case op 
          when :lit # this is the only code that actually does a comparison
-           break false unless cond_comp[match_enum.current[1], self_enum.current]
+           break false unless cond_comp[args, self_enum.current]
            puts "match at #{self_enum.index}" 
            match_enum.next and self_enum.next #advance both
          when :noop
            puts "advance match"
            match_enum.next #advance enumerator, but not match
            next
+         when :save
+           unless match_hash.has_key? args
+             match_hash[args] = { :begin => self_enum.index }
+           else
+             match_hash[args][:end] = self_enum.index
+           end
+         # not currently in use
+         when :peek
+           break false unless cond_comp[args, self_enum.peek]
+           puts "peek successful"
+           match_enum.next and self_enum.next #advance both
          when :match
            last_idx = self_enum.index
            puts "match state reached!"
            throw :stop_now #because we don't know how deeply we are nested
          when :jump
            puts "jump match"
-           match_enum[match_enum.current[1]] # set the index
+           match_enum[args] # set the index
            next 
          when :split
            # branch1
            puts "splitting"
            b1 = match_enum.dup # create a new iterator to explore the other branch
-           b1.index = match_enum.current[1] #set the index to split location
+           b1.index = match_enum.current[args.first] #set the index to split location
            if cmp_lamb[b1,self_enum.dup]
              break true
            else
-             match_enum.index = match_enum.current[2]
+             match_enum.index = match_enum.current[args.last]
              next
            end
         end
@@ -176,7 +187,7 @@ module MinimalMatch
     catch :stop_now do
       cmp_lamb.call match_enum, self_enum
     end
-    
+    puts match_hash 
     true if match_enum.current[0] == :match
   end
 end

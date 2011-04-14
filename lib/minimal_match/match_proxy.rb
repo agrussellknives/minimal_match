@@ -23,10 +23,6 @@ module MinimalMatch
       @comp_obj.nil? ? true : false
     end
 
-    def is_group?
-      false
-    end
-
     def to_s
       if @comp_obj.kind_of? AnyOf and @comp_obj.negated?
         s = @comp_obj.to_s 
@@ -63,6 +59,7 @@ module MinimalMatch
         if is_proxy? v or is_match_op? v then v else MatchProxy.new(v) end 
       end
       @bind_name = nil
+      @is_group = true
       self
     end
     
@@ -75,10 +72,6 @@ module MinimalMatch
       str
     end
     
-    def is_group?
-      true
-    end
-
     def bind name = nil
       @bind_name = name
     end
@@ -117,6 +110,7 @@ module MinimalMatch
           memo << mi.compile(bind_index+idx+1)
         end
       end
+      run << [:save, @bind_name || bind_index]
       run
     end
 

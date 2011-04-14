@@ -11,8 +11,8 @@ module Kernel
     MinimalMatch.m *args
   end
 
-  def ma *args
-    MinimalMatch.any *args
-  end
+  Anything = MinimalMatch::Anything
+  Begin = MinimalMatch::Begin
+  End = MinimalMatch::End
 end
 

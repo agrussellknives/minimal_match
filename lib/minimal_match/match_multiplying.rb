@@ -44,13 +44,15 @@ module MinimalMatch
   # because this is actually pretty fucking confusing.
   # I guess I could take up four times as much
   # code by writing this all explicitly - but it seems
-  # wrong seems like candidate for refactor
+  # nearly as wrong as doing it this way
+  # seems like candidate for refactor
   ops = {
   ZeroOrMore: {
     :op_symbol => '*',
     :compile_proc => lambda { |i,block|
       run = []
       tl = @comp_obj.compile(i)
+      tl = [tl] unless is_group? tl
       run << block.call(i+1,i+tl.length+2)
       run.concat tl 
       run << [:jump, i]
@@ -61,6 +63,7 @@ module MinimalMatch
     :compile_proc => lambda { |i,block|
       run = []
       tl = @comp_obj.compile(i)
+      tl = [tl] unless is_group? tl
       run.concat tl
       run << block.call(i,i+tl.length+1)
       run << [:noop]
@@ -70,6 +73,7 @@ module MinimalMatch
     :compile_proc => lambda { |i,block|
       run = []
       tl = @comp_obj.compile(i)
+      tl = [tl] unless is_group? tl
       run << block.call(i+1,i+tl.length+1)
       run.concat tl
       run << [:noop]
@@ -205,13 +209,10 @@ module MinimalMatch
       @is_match_op = true
       @alt_obj = arg
       @comp_obj = comp_obj
+      @is_group = true
     end
 
     # because it takes up more than single instruction
-    def is_group?
-      true
-    end
-
     def inspect
       "<#{@comp_obj.inspect} or #{@alt_obj.inspect}"
     end
@@ -224,11 +225,11 @@ module MinimalMatch
       run = []
       br_1idx = idx + 1
       brch_1 = @comp_obj.compile(br_1idx) 
-      brch_1 = [brch_1] unless @comp_obj.is_group?
+      brch_1 = [brch_1] unless is_group? @comp_obj
       
       br_2idx = brch_1.length + 2
       brch_2 = @alt_obj.compile(br_2idx) 
-      brch_2 = [brch_2] unless @alt_obj.is_group?
+      brch_2 = [brch_2] unless is_group? @comp_obj
 
       run << [:split, idx + 1, idx+brch_1.length+2] #plus jump and split instructions
       run.concat brch_1
@@ -303,7 +304,7 @@ module MinimalMatch
   end
 
 
-  # include these module in the abstract matchproxy
+  # include these modules in the abstract matchproxy
   AbstractMatchProxy.__send__ :include, ::MinimalMatch::MatchMultiplying
   AbstractMatchProxy.__send__ :include, ::MinimalMatch::Alternate
 end
