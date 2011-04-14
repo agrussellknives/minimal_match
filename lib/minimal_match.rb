@@ -1,4 +1,25 @@
 module MinimalMatch
+  module ToProxy
+    def to_m
+      r = MinimalMatch::MatchProxy.new(MinimalMatch::NoOp)
+      this = self
+      r.instance_eval do
+        @comp_obj = this #closures rock my world
+      end
+      r
+    end
+  end
+
+  module Debugging
+    def debug?
+      @debug || false
+    end
+
+    def debug= arg
+      @debug = arg
+    end
+  end
+
   module ProxyOperators
     # it's easier to just set this directly on these objects
     # rather than to construct the heuristic for determining
@@ -11,17 +32,19 @@ module MinimalMatch
     def is_match_op? obj
       obj.instance_variable_get :@is_match_op
     end
+    #because i keep typing it wrong
+    alias :is_match_obj? :is_match_op?
 
     def is_group? obj
       obj.instance_variable_get :@is_group
     end
   end
-  extend ProxyOperators
 
-  def m(*args)
+  def m(*args,&block)
     raise ArgumentError, "Wrong number of arguments 0 for ..." if args.empty?
     if block_given?
-      # can use this to create a matchproxy block 
+      raise ArgumentError, "Block supplied - didn't expect arguments" unless args.empty?
+      MinimalMatch::MatchProxy.new(&block)
     else
       if args.length == 1 || args.nil?
         val = args.nil? ? nil : args[0]

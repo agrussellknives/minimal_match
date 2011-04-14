@@ -5,11 +5,9 @@ module MinimalMatch
 
   # abstract repetition class
   class Repetition < MinimalMatchObject 
-    def initialize under_prox, &block
-      # you define a new to_s method for each
-      # subclass whenever you instantiate it
+    def initialize under_prox
       raise ::ArgumentError, "repetition support on matchproxy objects only" unless is_proxy? under_prox 
-      super()
+      super(self.class)
       @comp_obj = under_prox 
       @is_match_op = true
     end
@@ -52,10 +50,10 @@ module MinimalMatch
     :compile_proc => lambda { |i,block|
       run = []
       tl = @comp_obj.compile(i)
-      tl = [tl] unless is_group? tl
+      #tl = [tl] unless is_group? tl or is_match_op? tl
       run << block.call(i+1,i+tl.length+2)
       run.concat tl 
-      run << [:jump, i]
+      run << [:jump, i] # back to the split 
       run << [:noop]
   }},
   OneOrMore: {
@@ -63,7 +61,7 @@ module MinimalMatch
     :compile_proc => lambda { |i,block|
       run = []
       tl = @comp_obj.compile(i)
-      tl = [tl] unless is_group? tl
+      #tl = [tl] unless is_group? tl or is_match_op? tl
       run.concat tl
       run << block.call(i,i+tl.length+1)
       run << [:noop]
@@ -73,7 +71,7 @@ module MinimalMatch
     :compile_proc => lambda { |i,block|
       run = []
       tl = @comp_obj.compile(i)
-      tl = [tl] unless is_group? tl
+      #tl = [tl] unless is_group? tl or is_match_op? tl
       run << block.call(i+1,i+tl.length+1)
       run.concat tl
       run << [:noop]
@@ -138,7 +136,7 @@ module MinimalMatch
     def non_greedy
       non_greedy_class.new(@range, @comp_obj)
     end
-    alias :-@ :non_greedy
+    alias :! :non_greedy
       
     def initialize range, comp_obj, &block
       super(comp_obj, &block)
@@ -195,15 +193,14 @@ module MinimalMatch
       else
         self_equiv, arg_equiv = self, arg
       end
-
       Alternation.new(self_equiv, arg_equiv)
     end
   end
 
- class Alternation < MinimalMatchObject
+  class Alternation < MinimalMatchObject
     include Alternate #so you can stack them
-
     attr_accessor :alt_obj, :comp_obj
+    
     def initialize comp_obj, arg
       super()
       @is_match_op = true
@@ -225,86 +222,106 @@ module MinimalMatch
       run = []
       br_1idx = idx + 1
       brch_1 = @comp_obj.compile(br_1idx) 
-      brch_1 = [brch_1] unless is_group? @comp_obj
-      
+      #brch_1 = [brch_1] unless is_group? @comp_obj
+
       br_2idx = brch_1.length + 2
       brch_2 = @alt_obj.compile(br_2idx) 
-      brch_2 = [brch_2] unless is_group? @comp_obj
+      #brch_2 = [brch_2] unless is_group? @comp_obj
 
       run << [:split, idx + 1, idx+brch_1.length+2] #plus jump and split instructions
-      run.concat brch_1
+      run << brch_1
       run << [:jump, idx + brch_1.length + 1 + brch_2.length + 1] #end of the alternation
-      run.concat brch_2
+      run << brch_2
       run << [:noop]
       run
     end
   end
 
- module MatchMultiplying
+  module MatchMultiplying
 
-    def * num
-      self[num..num]
+  def * num
+    self[num..num]
+  end
+
+  def [] range
+    # coerce non ranges into single length range
+    unless range.is_a? Range then
+      r = range.to_i
+      raise TypeError, "could not convert #{range} into Range" unless r > 0
+      range = [r..r]
     end
+    #this is where 2..8 would go
+    cl = @non_greedy ? CountedRepetition.non_greedy_class : CountedRepetition
+    @rep_obj = cl.new range, self
+  end
 
-    def [] range
-      # coerce non ranges into single length range
-      unless range.is_a? Range then
-        r = range.to_i
-        raise TypeError, "could not convert #{range} into Range" unless r > 0
-        range = [r..r]
-      end
-      #this is where 2..8 would go
-      cl = @non_greedy ? CountedRepetition.non_greedy_class : CountedRepetition
-      @rep_obj = cl.new range, self
+  def times arg
+    if arg.is_a? Range then
+      self[arg]
+    elsif arg.is_a? Fixnum then
+      self[arg..arg]
+    else
+      raise 
     end
+  end
+    
 
-    # make the non-greedy modifier
-    # less particular about parentheses
-    def non_greedy
-      @non_greedy = true
-      self
-    end
+  # make the non-greedy modifier
+  # less particular about parentheses
+  def non_greedy
+    @non_greedy = true
+    self
+  end
 
-    #aliasing this doesn't work
-    def greedy
-      @non_greedy = false
-      self
-    end
+  #aliasing this doesn't work
+  def greedy
+    @non_greedy = false
+    self
+  end
 
-    def greedy?
-      !(@non_greedy)
-    end
+  def greedy?
+    !(@non_greedy)
+  end
 
-    def !
-      if @non_greedy then greedy else non_greedy end
-    end
+  def !
+    if @non_greedy then greedy else non_greedy end
+  end
 
-    def +@
-      @one_or_more_obj ||= count_class(OneOrMore)
-      @one_or_more_obj_non_greedy ||= count_class(OneOrMoreNonGreedy)
-      @non_greedy ? @one_or_more_obj_non_greedy : @one_or_more_obj
-    end
+  def +@
+    @one_or_more_obj ||= count_class(OneOrMore)
+    @one_or_more_obj_non_greedy ||= count_class(OneOrMoreNonGreedy)
+    @non_greedy ? @one_or_more_obj_non_greedy : @one_or_more_obj
+  end
+  alias :plus :+@
 
-    def ~@
-      @one_or_zero_obj ||= count_class(ZeroOrOne)
-      @one_or_zero_obj_non_greedy ||= count_class(ZeroOrOneNonGreedy) 
-      @non_greedy ? @one_or_zero_obj_non_greedy : @one_or_zero_obj
-    end
+  def ~@
+    @one_or_zero_obj ||= count_class(ZeroOrOne)
+    @one_or_zero_obj_non_greedy ||= count_class(ZeroOrOneNonGreedy) 
+    @non_greedy ? @one_or_zero_obj_non_greedy : @one_or_zero_obj
+  end
+  alias :quest :~@
 
-    def to_a
-      @zero_or_more_obj ||= count_class(ZeroOrMore)
-      @zero_or_more_obj_non_greedy ||= count_class(ZeroOrMoreNonGreedy)
-      [@non_greedy ? @zero_or_more_obj_non_greedy : @zero_or_more_obj] # has to actually return array
-    end
+  def to_a
+    @zero_or_more_obj ||= count_class(ZeroOrMore)
+    @zero_or_more_obj_non_greedy ||= count_class(ZeroOrMoreNonGreedy)
+    [@non_greedy ? @zero_or_more_obj_non_greedy : @zero_or_more_obj] # has to actually return array
+  end
 
-    private
+  # This is the non array version of the KleeneStar operator (in to_a) 
+  # this enables you write some pretty pathological expressions which aren't
+  # currently caught, so use with care
+  def kleene 
+    to_a[0]
+  end
+
+  private
     def count_class super_class
       super_class.new(self)
     end
   end
 
 
-  # include these modules in the abstract matchproxy
+# include these modules in the abstract matchproxy
   AbstractMatchProxy.__send__ :include, ::MinimalMatch::MatchMultiplying
   AbstractMatchProxy.__send__ :include, ::MinimalMatch::Alternate
 end

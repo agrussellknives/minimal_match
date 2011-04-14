@@ -4,14 +4,25 @@ module MinimalMatch
   # a minimal match object should implement the _compile
   # method
   module MatchCompile
+  #bytecodes and their arity
+  BYTECODES = {
+   split: 2,
+   lit: 1,
+   jump: 1,
+   noop: 0,
+   peek: 1,
+   save: 1,
+   match: 0
+  }
+  #BYTECODES = [:split,:lit,:jump,:save,:match]   
     def compile at_index=nil, obj=nil
       # for match proxies respond to goes to the subject
       # so we try this and catch the error 
       begin
-        self._compile(at_index || 0)
+        r = self._compile(at_index || 0)
       rescue NoMethodError => e
         raise e unless e.name == :_compile #pass any other exception
-        if obj and is_proxy? obj
+        r = if obj and is_proxy? obj
           [:lit, obj.comp_obj]
         elsif not obj and is_proxy? self
           [:lit, @comp_obj]
@@ -22,6 +33,29 @@ module MinimalMatch
     end
     module_function :compile
     public :compile
+
+    def flatten_compile arr
+      p arr
+      arr = arr.each
+      res = []
+      loop do
+        i = arr.next
+        #account for literal match for a bytecode symbol
+        if (BYTECODES.keys.include?(i.first) rescue false)
+          res.push(i)
+        elsif BYTECODES.keys.include?(i)
+          t = [i] 
+          BYTECODES[i].times do
+            t << arr.next
+          end
+          res.push(t)
+        else
+          res.concat flatten_compile i 
+        end
+      end
+      res
+    end
+    module_function :flatten_compile
   end
   MatchCompile.extend MinimalMatch::ProxyOperators
 
@@ -87,7 +121,9 @@ module MinimalMatch
 
   # enable the is_proxy? test-like-thingy in matchobjects
   MinimalMatchObject.send :include, MinimalMatch::ProxyOperators
+  MinimalMatchObject.send :include, MinimalMatch::ToProxy # WHOA, DID YOU SEE YOUR MIND GET BLOWN
   MinimalMatchObject.send :include, MinimalMatch::MatchCompile
+  MinimalMatchObject.send :include, MinimalMatch::Debugging
 
 
   class AbstractMatchProxy < MinimalMatchObject
@@ -120,8 +156,13 @@ module MinimalMatch
       raise "How did you instantiate this object? This is an abstract."
     end
 
-    def _compile(*)  #who cares
-      [:lit, @comp_obj]
+    def _compile(idx = 0) #support nested single proxies
+      # no method error will be caught by "compile"
+      if is_proxy? @comp_obj or is_match_op? @comp_obj
+        @comp_obj._compile(idx+1) # so, like not including myself natch
+      else
+        [:lit, @comp_obj]
+      end
     end
     
     private :initialize
