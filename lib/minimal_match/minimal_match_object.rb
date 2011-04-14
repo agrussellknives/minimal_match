@@ -4,14 +4,17 @@ module MinimalMatch
   # a minimal match object should implement the _compile
   # method
   module MatchCompile
+    # bad news - this precludes matching on any of these symbols
+    # how do i overcome this
+    BYTECODES = [:split, :lit, :jump, :noop, :peek, :save, :match]
     def compile at_index=nil, obj=nil
       # for match proxies respond to goes to the subject
       # so we try this and catch the error 
       begin
-        self._compile(at_index || 0)
+        r = self._compile(at_index || 0)
       rescue NoMethodError => e
         raise e unless e.name == :_compile #pass any other exception
-        if obj and is_proxy? obj
+        r = if obj and is_proxy? obj
           [:lit, obj.comp_obj]
         elsif not obj and is_proxy? self
           [:lit, @comp_obj]
@@ -19,9 +22,27 @@ module MinimalMatch
           [:lit, obj]
         end
       end
+      flatten_compile r
     end
     module_function :compile
     public :compile
+
+    def flatten_compile arr
+      lit_code = false
+      res = arr.flatten.inject([]) do |m,i|
+        #account for literal match for a bytecode symbol
+        if BYTECODES.include?(i) and not lit_code
+          m.push([i])
+          lit_code = true if i == :lit
+        else
+          m.last.push(i)
+          lit_code = false
+        end
+        m
+      end
+      res
+    end
+    module_function :flatten_compile
   end
   MatchCompile.extend MinimalMatch::ProxyOperators
 
@@ -120,8 +141,13 @@ module MinimalMatch
       raise "How did you instantiate this object? This is an abstract."
     end
 
-    def _compile(*)  #who cares
-      [:lit, @comp_obj]
+    def _compile(idx = 0) #support nested single proxies
+      # no method error will be caught by "compile"
+      if is_proxy? @comp_obj or is_match_op? @comp_obj
+        @comp_obj._compile(idx+1) # so, like not including myself natch
+      else
+        [:lit, @comp_obj]
+      end
     end
     
     private :initialize

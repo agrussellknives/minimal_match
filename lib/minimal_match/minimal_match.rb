@@ -2,7 +2,7 @@
 require 'fiber'
 require 'singleton'
 #
-%w{ minimal_match_object match_proxy match_multiplying anything any_of 
+%w{ minimal_match_object match_proxy match_multiplying special_literals
     array_match_data reversible_enumerator}.each { |mod| require "#{File.dirname(__FILE__)}/#{mod}"}
 
 module MinimalMatch
@@ -15,7 +15,7 @@ module MinimalMatch
 
     def to_s
       #memoize the string value after it's calculated
-      @s_val ||= lambda { self.class.gsub("Class",'') }.call
+      @s_val ||= lambda { self.class.to_s.gsub("Class",'') }.call
     end
 
     def inspect
@@ -42,8 +42,8 @@ module MinimalMatch
   def noop; NoOp.instance(); end
     
   def compile match_array
+    debugger
     is = []
-
     match_array.each do |mi|
       i = is.length
       if mi.respond_to? :compile
@@ -54,7 +54,7 @@ module MinimalMatch
       end
     end
     is << [:match]
-    is
+    MatchCompile.flatten_compile is
   end
   module_function :compile
 
@@ -101,17 +101,16 @@ module MinimalMatch
 
     
     unless has_begin
-      match_array.unshift MatchProxy.new(Anything).non_greedy.to_a
+      match_array.unshift(*MatchProxy.new(Anything).non_greedy.to_a)
     end
 
     unless has_end
-      match_array.push MatchProxy.new(Anything).to_a
+      match_array.concat(MatchProxy.new(Anything).to_a)
     end
     
-    match_array.inspect 
+    puts match_array.inspect 
 
     ma = compile match_array
-    
     
     # use this function as the comparate to enable
     # recursive matching.
@@ -130,13 +129,24 @@ module MinimalMatch
     p ma
     first_idx = nil
     last_idx = nil
-    current_match_data = ArrayMatchData.new
     match_hash = {}
+
+    pathology_count = 0
+
+    # a simple recursive loop NFA style regex matcher
 
     cmp_lamb = lambda do |match_enum,self_enum|
       p match_enum.current
       loop do
+        pathology_count += 1
         op, *args = match_enum.current
+        puts <<-INFO if @debug
+          self: #{self_enum.current}
+          op: #{op}
+          args: #{args}
+        INFO
+        #smells funny, but i thinkg this is actually correct
+        args = args.length == 1 ? args[0] : args
         case op 
          when :lit # this is the only code that actually does a comparison
            break false unless cond_comp[args, self_enum.current]
@@ -147,7 +157,7 @@ module MinimalMatch
            match_enum.next #advance enumerator, but not match
            next
          when :save
-           unless match_hash.has_key? args
+           unless match_hash.has_key? *args
              match_hash[args] = { :begin => self_enum.index }
            else
              match_hash[args][:end] = self_enum.index
@@ -160,7 +170,7 @@ module MinimalMatch
          when :match
            last_idx = self_enum.index
            puts "match state reached!"
-           throw :stop_now #because we don't know how deeply we are nested
+           throw :stop_now, true #because we don't know how deeply we are nested
          when :jump
            puts "jump match"
            match_enum[args] # set the index
@@ -169,11 +179,11 @@ module MinimalMatch
            # branch1
            puts "splitting"
            b1 = match_enum.dup # create a new iterator to explore the other branch
-           b1.index = match_enum.current[args.first] #set the index to split location
+           b1.index = args.first #set the index to split location
            if cmp_lamb[b1,self_enum.dup]
              break true
            else
-             match_enum.index = match_enum.current[args.last]
+             match_enum.index = args.last
              next
            end
         end
@@ -181,13 +191,14 @@ module MinimalMatch
     end
     
     match_enum = ReversibleEnumerator.new ma
-    self_enum = ReversibleEnumerator.new match_self 
+    self_enum = ReversibleEnumerator.new match_self
+    puts pathology_count
 
     match_enum.next and self_enum.next #start
-    catch :stop_now do
+    res = catch :stop_now do
       cmp_lamb.call match_enum, self_enum
     end
     puts match_hash 
-    true if match_enum.current[0] == :match
+    res and true or false
   end
 end

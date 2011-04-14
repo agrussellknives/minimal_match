@@ -79,9 +79,9 @@ module MinimalMatch
     def to_s
       str = "m("
       str << @comp_obj.collect do |i|
-        if i.is_group?
+        if is_group? i
           i.to_s
-        elsif i.comp_obj.is_a? ::Symbol
+        elsif i.comp_obj.is_a? ::Symbol #yeahhh
           ":#{i.comp_obj.to_s}"
         else
           i.comp_obj.to_s
@@ -104,11 +104,7 @@ module MinimalMatch
           mi : #{mi.to_s}
           idx : #{idx.to_s}
         INFO
-        if is_match_op? mi # match objects automaticall start in an array
-          memo.concat mi.compile(bind_index+idx+1)
-        else
-          memo << mi.compile(bind_index+idx+1)
-        end
+        memo << mi.compile(bind_index+idx+1)
       end
       run << [:save, @bind_name || bind_index]
       run

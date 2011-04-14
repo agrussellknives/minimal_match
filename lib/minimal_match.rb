@@ -11,6 +11,8 @@ module MinimalMatch
     def is_match_op? obj
       obj.instance_variable_get :@is_match_op
     end
+    #because i keep typing it wrong
+    alias :is_match_obj? :is_match_op?
 
     def is_group? obj
       obj.instance_variable_get :@is_group
@@ -18,10 +20,11 @@ module MinimalMatch
   end
   extend ProxyOperators
 
-  def m(*args)
+  def m(*args,&block)
     raise ArgumentError, "Wrong number of arguments 0 for ..." if args.empty?
     if block_given?
-      # can use this to create a matchproxy block 
+      raise ArgumentError, "Block supplied - didn't expect arguments" unless args.empty?
+      MinimalMatch::MatchProxy.new(&block)
     else
       if args.length == 1 || args.nil?
         val = args.nil? ? nil : args[0]
