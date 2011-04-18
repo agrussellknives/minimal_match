@@ -30,12 +30,12 @@ module MinimalMatch
           [:lit, obj]
         end
       end
+      normalize_compile r
     end
     module_function :compile
     public :compile
 
-    def flatten_compile arr
-      p arr
+    def normalize_compile arr
       arr = arr.each
       res = []
       loop do
@@ -50,12 +50,12 @@ module MinimalMatch
           end
           res.push(t)
         else
-          res.concat flatten_compile i 
+          res.concat normalize_compile i 
         end
       end
       res
     end
-    module_function :flatten_compile
+    module_function :normalize_compile
   end
   MatchCompile.extend MinimalMatch::ProxyOperators
 
@@ -63,10 +63,6 @@ module MinimalMatch
   class MinimalMatchObject < BasicObject
     # Abstract
     #
-    def MinimalMatchObject.const_missing const
-      puts "#{const} missing in matchobject heir #{const}"
-    end
-
     def class
       class << self
         self.superclass
