@@ -5,7 +5,9 @@ module MinimalMatch
 
   # abstract repetition class
   class Repetition < MinimalMatchObject 
-    def initialize under_prox
+    def initialize under_prox, &block
+      # you define a new to_s method for each
+      # subclass whenever you instantiate it
       raise ::ArgumentError, "repetition support on matchproxy objects only" unless is_proxy? under_prox 
       super(self.class)
       @comp_obj = under_prox 
@@ -90,7 +92,7 @@ module MinimalMatch
         "#{self.class} of #{self.comp_obj.inspect}"
       end
       define_method :_compile do |i|
-        instance_exec i, lambda { |idx,len| [:split,idx,len] }, &compile_proc
+        instance_exec i, lambda { |idx,len| [:split,len,idx] }, &compile_proc
       end
     end
     non_greedy = Class.new(greedy) do
@@ -104,7 +106,7 @@ module MinimalMatch
         "#{super()}.non_greedy"
       end
       define_method :_compile do |i| 
-        instance_exec i, lambda { |idx,len| [:split,len,idx] }, &compile_proc
+        instance_exec i, lambda { |idx,len| [:split,idx,len] }, &compile_proc
       end
     end
     self.const_set class_name, greedy
@@ -300,6 +302,39 @@ module MinimalMatch
     @non_greedy ? @one_or_zero_obj_non_greedy : @one_or_zero_obj
   end
   alias :quest :~@
+
+  # make the non-greedy modifier
+  # less particular about parentheses
+  def non_greedy
+    @non_greedy = true
+    self
+  end
+
+  #aliasing this doesn't work
+  def greedy
+    @non_greedy = false
+    self
+  end
+
+  def greedy?
+    !(@non_greedy)
+  end
+
+  def !
+    if @non_greedy then greedy else non_greedy end
+  end
+
+  def +@
+    @one_or_more_obj ||= count_class(OneOrMore)
+    @one_or_more_obj_non_greedy ||= count_class(OneOrMoreNonGreedy)
+    @non_greedy ? @one_or_more_obj_non_greedy : @one_or_more_obj
+  end
+
+  def ~@
+    @one_or_zero_obj ||= count_class(ZeroOrOne)
+    @one_or_zero_obj_non_greedy ||= count_class(ZeroOrOneNonGreedy) 
+    @non_greedy ? @one_or_zero_obj_non_greedy : @one_or_zero_obj
+  end
 
   def to_a
     @zero_or_more_obj ||= count_class(ZeroOrMore)

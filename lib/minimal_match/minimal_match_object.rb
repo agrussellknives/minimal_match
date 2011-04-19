@@ -15,7 +15,7 @@ module MinimalMatch
    match: 0
   }
   #BYTECODES = [:split,:lit,:jump,:save,:match]   
-    def compile at_index=nil, obj=nil
+   def compile at_index=nil, obj=nil
       # for match proxies respond to goes to the subject
       # so we try this and catch the error 
       begin
@@ -30,6 +30,7 @@ module MinimalMatch
           [:lit, obj]
         end
       end
+      flatten_compile r
     end
     module_function :compile
     public :compile

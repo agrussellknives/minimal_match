@@ -42,6 +42,7 @@ module MinimalMatch
   def noop; NoOp.instance(); end
     
   def compile match_array
+    debugger
     is = []
     match_array.each do |mi|
       i = is.length
@@ -72,7 +73,6 @@ module MinimalMatch
       match_self << Sentinel
       match_array = match_array_orig.dup
     
-     
       puts "comping #{match_self} to #{match_array}"
 
       #there is no need to look past END or before BEGINh
@@ -134,61 +134,56 @@ module MinimalMatch
 
       # a simple recursive loop NFA style regex matcher
 
-      cmp_lamb = lambda do |match_enum,self_enum|
-        p match_enum.current
-        loop do
-          pathology_count += 1
-          op, *args = match_enum.current
-          puts <<-INFO if @debug
-            self: #{self_enum.current}
-            op: #{op}
-            args: #{args}
-          INFO
-          #smells funny, but i thinkg this is actually correct
-          args = args.length == 1 ? args[0] : args
-          case op 
-           when :lit # this is the only code that actually does a comparison
-             break false unless cond_comp[args, self_enum.current]
-             puts "match at #{self_enum.index}" 
-             match_enum.next and self_enum.next #advance both
-           when :noop
-             puts "advance match"
-             match_enum.next #advance enumerator, but not match
+   cmp_lamb = lambda do |match_enum,self_enum|
+      p match_enum.current
+      loop do
+        pathology_count += 1
+        op, *args = match_enum.current
+        puts <<-INFO if @debug
+          self: #{self_enum.current}
+          op: #{op}
+          args: #{args}
+        INFO
+        #smells funny, but i thinkg this is actually correct
+        args = args.length == 1 ? args[0] : args
+        case op 
+         when :lit # this is the only code that actually does a comparison
+           break false unless cond_comp[args, self_enum.current]
+           puts "match at #{self_enum.index}" 
+           match_enum.next and self_enum.next #advance both
+         when :noop
+           puts "advance match"
+           match_enum.next #advance enumerator, but not match
+           next
+         when :save
+           unless match_hash.has_key? *args
+             match_hash[args] = { :begin => self_enum.index }
+           else
+             match_hash[args][:end] = self_enum.index
+           end
+         # not currently in use
+         when :peek
+           break false unless cond_comp[args, self_enum.peek]
+           puts "peek successful"
+           match_enum.next and self_enum.next #advance both
+         when :match
+           last_idx = self_enum.index
+           puts "match state reached!"
+           throw :stop_now, true #because we don't know how deeply we are nested
+         when :jump
+           puts "jump match"
+           match_enum[args] # set the index
+           next 
+         when :split
+           # branch1
+           puts "splitting"
+           b1 = match_enum.dup # create a new iterator to explore the other branch
+           b1.index = args.first #set the index to split location
+           if cmp_lamb[b1,self_enum.dup]
+             break true
+           else
+             match_enum.index = args.last
              next
-           when :save
-             unless match_hash.has_key? *args
-               match_hash[args] = { :begin => self_enum.index }
-             else
-               match_hash[args][:end] = self_enum.index
-             end
-           # not currently in use
-           when :peek
-             break false unless cond_comp[args, self_enum.peek]
-             puts "peek successful"
-             match_enum.next and self_enum.next #advance both
-           when :match
-             last_idx = self_enum.index
-             puts "match state reached!"
-             throw :stop_now, true #because we don't know how deeply we are nested
-           when :jump
-             puts "jump match"
-             match_enum[args] # set the index
-             next 
-           when :split
-             # branch1
-             puts "splitting"
-             b1 = match_enum.dup # create a new iterator to explore the other branch
-             b1.index = args.first #set the index to split location
-             if cmp_lamb[b1,self_enum]
-               break true
-             else
-               match_enum.index = args.last
-               next
-             end
-          end
-        end
-      end
-      
       match_enum = ReversibleEnumerator.new ma
       self_enum = ReversibleEnumerator.new match_self
       puts pathology_count
@@ -202,5 +197,16 @@ module MinimalMatch
       puts match_hash 
       res and true or false
     end
+    
+    match_enum = ReversibleEnumerator.new ma
+    self_enum = ReversibleEnumerator.new match_self
+    puts pathology_count
+
+    match_enum.next and self_enum.next #start
+    res = catch :stop_now do
+      cmp_lamb.call match_enum, self_enum
+    end
+    puts match_hash 
+    res and true or false
   end
 end
