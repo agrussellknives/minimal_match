@@ -63,4 +63,5 @@ require 'minimal_match/minimal_search'
 
 #remove this!
 require 'minimal_match/kernel'
+require 'minimal_match/debug_machine'
 
