@@ -65,15 +65,20 @@ module MinimalMatch
           memo << (COMMANDS[dir[0]] * dir[1].abs)
         end
       end,
+      moveto: lambda do |opts = {}|
+        row, col = { :row => nil, :col => nil}.merge(opts).values
+        cmd = (col and row) ? ('cup' : ( col ? 'hpa' : (row ? 'vpa' : 'home'))
+        `tput cup #{col} #{row}`
+      end,
       current_position: lambda do |t|
         # holy mother of what's the fucking point of u7??
         system("stty -echo; tput u7; read -d R x; stty echo; echo ${x#??} > #{t.path}")
-        temp_file.read.chomp.split(';')
+        t.read.chomp.split(';').map(&:to_i)
       end
     }
 
     def initialize(prog, subj, col = 1, zeroth = [0,0])
-      @temp_file = TempFile.new('debug_machine')
+      @temp_file = Tempfile.new('debug_machine')
       @commands = COMMANDS.dup
 
       @delay = 0.25 
@@ -84,36 +89,39 @@ module MinimalMatch
       first_width = @subj.map(&:to_s).map(&:length).max + 10
       inst_width = @program.map(&:to_s).map(&:length).max + 10
       @width = [first_width, inst_width].max
+      @size = { :cols => `tput cols`.to_i, :rows => @program.length + 1}
+      #@top_line, @first_col = @commands[:current_position][@temp_file]
+      #
+      @top_line, @first_col = zeroth
 
-      @top_line, @first_col = @commands[:current_position]
-     
-      cols = `tput cols`.to_i
-      rows = @program.length + 1
-
+      # do I need to scroll down?
+      debugger
+      
       @commands[:home] = lambda do
+        str = ""
         str << `tput cup #{@top_line} #{@first_col}`
+        str
       end.call
 
       @commands[:info] = lambda do
         str = ""
         str << there_and_back do
-          str << `tput cup #{rows + 1} 0`
+          str << `tput cup #{@size[:rows] + 1} 0`
         end
         str << '%s'
         str
       end.call
 
       @commands[:line] = lambda do
-        smacs { "#{'q' * cols}" }
+        smacs { "#{'q' * @size[:cols]}" }
       end.call
 
       @commands[:clear] = lambda do
         str = ""
         str << @commands[:home]
-        cols = `tput cols`.to_i
         str << color(2) { @commands[:line] }
-        (cols * rows).times do
-          str << ' ' 
+        (@size[:cols] * @size[:rows]).times do
+          str << ' '
         end
         str << color(2) { @commands [:line] }
         str
@@ -123,9 +131,9 @@ module MinimalMatch
         str = ""
         str << @commands[:home]
         str << color(15) { self.to_s + "\n" }
-        subj.each_with_index do |subj,idx|
-          str << color(7) { " #{idx} : #{subj} " }
-          str << `tput hpa #{@first_col + @width - 2}`
+        subj.each_with_index do |entry,idx|
+          str << color(7) { " #{idx} : #{entry} " }
+          str << `tput hpa #{@width - 2}`
           str << smacs{ "x\n" }
         end
         str
@@ -148,7 +156,8 @@ module MinimalMatch
       str = ""
       str << @commands[:subject] 
       if hilight
-        str << `tput cup #{@top_line + hilight + 1} #{@first_col}`
+        str << @commands[:moveto][:col => 1]
+        str << @commands[:mrcup][hilight,0]
         str << color(6) { "*#{hilight} : #{@subj[hilight]}*" }
       end
       str
@@ -158,7 +167,8 @@ module MinimalMatch
       str = ""
       str << @commands[:self] 
       if inst
-        str << `tput cup #{@top_line + inst +1} #{(@col * @width) + @first_col}`
+        str << @commands[:moveto][:col => @first_col]
+        str << `tput cup #{@top_line + inst + 1} #{(@col * @width) + @first_col}`
         str << color(1) { " >>>" }
       end
       str
@@ -171,10 +181,13 @@ module MinimalMatch
     def display inst = nil, subj = nil
       str = ""
       str << @commands[:clear] if @parent
+      str << @commands[:save]
+      str << @commands[:mrcup][-(@size[:rows]),0]
+      str << @commands[:moveto][col:1]
       str << draw_subject(subj) if subj
       str << draw_self(inst) 
+      str << @commands[:restore]
       $stdout.print str
-      sleep @delay 
       nil
     end
 
