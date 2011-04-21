@@ -67,7 +67,7 @@ module MinimalMatch
       end,
       moveto: lambda do |opts = {}|
         row, col = { :row => nil, :col => nil}.merge(opts).values
-        cmd = (col and row) ? ('cup' : ( col ? 'hpa' : (row ? 'vpa' : 'home'))
+        cmd = (col and row) ? 'cup' : (col ? 'hpa' : (row ? 'vpa' : 'home'))
         `tput cup #{col} #{row}`
       end,
       current_position: lambda do |t|
@@ -90,23 +90,16 @@ module MinimalMatch
       inst_width = @program.map(&:to_s).map(&:length).max + 10
       @width = [first_width, inst_width].max
       @size = { :cols => `tput cols`.to_i, :rows => @program.length + 1}
-      #@top_line, @first_col = @commands[:current_position][@temp_file]
-      #
       @top_line, @first_col = zeroth
 
       # do I need to scroll down?
-      debugger
+      #debugger
       
-      @commands[:home] = lambda do
-        str = ""
-        str << `tput cup #{@top_line} #{@first_col}`
-        str
-      end.call
-
       @commands[:info] = lambda do
         str = ""
         str << there_and_back do
-          str << `tput cup #{@size[:rows] + 1} 0`
+          str << @commands[:mrcup][@size[:rows] + 1,0]
+          str << @commands[:moveto][:col => 0]
         end
         str << '%s'
         str
@@ -118,35 +111,40 @@ module MinimalMatch
 
       @commands[:clear] = lambda do
         str = ""
-        str << @commands[:home]
         str << color(2) { @commands[:line] }
         (@size[:cols] * @size[:rows]).times do
           str << ' '
         end
         str << color(2) { @commands [:line] }
+        str << @commands[:mrcup][-(@size[:rows]),0] #move back to the beginning
         str
+
       end.call
 
       @commands[:subject] = lambda do
-        str = ""
-        str << @commands[:home]
-        str << color(15) { self.to_s + "\n" }
-        subj.each_with_index do |entry,idx|
-          str << color(7) { " #{idx} : #{entry} " }
-          str << `tput hpa #{@width - 2}`
-          str << smacs{ "x\n" }
+        str = "" 
+        str << there_and_back do 
+          str << color(15) { self.to_s + "\n" }
+          subj.each_with_index do |entry,idx|
+            str << color(7) { " #{idx} : #{entry} " }
+            str << @commands[:moveto][:col => (@width - 2)]
+            str << smacs{ "x\n" }
+          end
+          str
         end
         str
       end.call
 
       @commands[:self] = lambda do
         str = ""
-        @program.each_with_index do |inst,idx|
-          str << `tput cup #{@top_line + idx + 1} #{(@col * @width) + @first_col}`
-          str << color(3) { " --- " }
-          str << color(7) { "#{idx}: #{inst}" }
-          str << `tput hpa #{(@col * @width) + @first_col - 2 }`
-          str << smacs { "x\n" }
+        str << there_and_back do
+          @program.each_with_index do |inst,idx|
+            str << @commands[:moveto][:col => ((@col * @width) + @first_col)]
+            str << color(3) { " --- " }
+            str << color(7) { "#{idx}: #{inst}" }
+            str << @commands[:moveto][:col => ((@col * (@width + 1) + @first_col - 2 ))]
+            str << smacs { "x\n" }
+          end
         end
         str
       end.call
@@ -156,22 +154,24 @@ module MinimalMatch
       str = ""
       str << @commands[:subject] 
       if hilight
-        str << @commands[:moveto][:col => 1]
-        str << @commands[:mrcup][hilight,0]
-        str << color(6) { "*#{hilight} : #{@subj[hilight]}*" }
+        str << there_and_back do
+          str << @commands[:moveto][:col => 1]
+          str << @commands[:mrcup][hilight,0]
+          str << color(6) { "*#{hilight} : #{@subj[hilight]}*" }
+        end
       end
-      str
     end
-
     def draw_self(inst = nil)
       str = ""
       str << @commands[:self] 
       if inst
-        str << @commands[:moveto][:col => @first_col]
-        str << `tput cup #{@top_line + inst + 1} #{(@col * @width) + @first_col}`
-        str << color(1) { " >>>" }
+        str << there_and_back do 
+          str << @commands[:moveto][:col => @first_col]
+          str << @commands[:mrcup][inst+1,0]
+          str << @commands[:moveto][:col => ((@col * @width) + @first_col)]
+          str << color(1) { " >>>" }
+        end
       end
-      str
     end
 
     def puts msg
@@ -181,15 +181,16 @@ module MinimalMatch
     def display inst = nil, subj = nil
       str = ""
       str << @commands[:clear] if @parent
-      str << @commands[:save]
-      str << @commands[:mrcup][-(@size[:rows]),0]
-      str << @commands[:moveto][col:1]
-      str << draw_subject(subj) if subj
-      str << draw_self(inst) 
-      str << @commands[:restore]
+      str << there_and_back do
+        str << @commands[:mrcup][-(@size[:rows]),0]
+        str << @commands[:moveto][col:1]
+        str << draw_subject(subj) if subj
+        str << draw_self(inst) 
+      end
       $stdout.print str
       nil
     end
+    alias :update :display
 
     def close
       $stdout << @commands[:end]
