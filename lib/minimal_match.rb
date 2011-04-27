@@ -11,12 +11,26 @@ module MinimalMatch
   end
 
   module Debugging
+    
+    class BlackHole < BasicObject #lo i am become blackhole, eater of messages
+      def method_missing m, *args
+        nil
+      end
+    end
+
+    BLACKHOLE = BlackHole.new
+
     def debug?
       @debug || false
     end
 
     def debug= arg
       @debug = arg
+    end
+
+    def dbger(prog,subj)
+      return BLACKHOLE unless @debug
+      @dd ||= DebugMachine.new(prog,subj)
     end
   end
 

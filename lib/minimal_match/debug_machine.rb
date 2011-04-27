@@ -1,31 +1,9 @@
 require 'tempfile'
 
-module MinimalMatch
-  class DebugMachine
-    class << self
-      def new_thread(p_machine)
-        prog, subj, col, *zeroth = p_machine.instance_eval {
-          [@program, @subj, @col, @home]
-        }
-        r = DebugMachine.new(prog,subj,col+1,zeroth)
-        r.parent = false
-        r
-      end
-
-      def new_layer(p_machine,subj)
-        prog, p_subj , _, tl, _= p_machine.instance_eval {
-          [@program, @subj, @col, @home]
-        }
-        tl = p_subj.length + 2 
-        r = DebugMachine.new(prog,subj,1,[tl,0])
-        r
-      end
-    end
-
-  class DebugMachineCache
-
-    remove_const :COMMANDS rescue nil#TODO remove this
-
+# it is so tempting to make this into a whole little gem
+module TermHelper
+  class CommandCache
+    remove_const :COMMANDS rescue nil
     # assemble format strings for movement commands
     movmts = Hash[[:hpa,:vpa,:cup,:home,:setaf].zip(
       [`tput hpa`, `tput vpa`, `tput cup`,`tput home`].collect do |fmt|
@@ -83,71 +61,133 @@ module MinimalMatch
     end
   end
 
-    # abstractions around common escape sequences or construction
-    def output to_stdout = false
-      string = ""
-      yield(string) # modifiy str in place
-      if to_stdout
-        $stdout << string
-      end
-      string
+  attr_reader :cache
+
+  # abstractions around common escape sequences or construction
+  def output string = nil 
+    to_stdout = true if string
+    string = "" unless string.respond_to? :<<
+    yield(string) if block_given? # modifiy str in place
+    if to_stdout 
+      $stdout << string
     end
- 
-    def color color
-      output do |str|
-        str << c.setaf(color)
-        str << yield
-        str << c.reset
+    string
+  end
+
+  def current_position
+    #taking bids for a better implementation of this
+    temp_file ||= @temp_file
+    temp_file ||= Tempfile.new()
+    system("stty -echo; tput u7; read -d R x; stty echo; echo ${x#??} > #{temp_file.path}")
+    temp_file.gets.chomp.split(';').map(&:to_i)
+  end
+
+  def color color
+    output do |str|
+      str << c.setaf(color)
+      str << yield
+      str << c.reset
+    end
+  end
+
+  def there_and_back
+    raise "nested there_and_back" if @within
+    @within = true
+    string = output do |str|
+      str << c.save 
+      str << yield
+      str << c.restore
+    end
+    @within = false
+    string
+  end
+
+  def smacs
+    output do |str|
+      str << c.smacs 
+      str << yield
+      str << c.rmacs 
+    end
+  end
+
+  def macro name, arr = nil
+    string = ""
+    if (block_given? and arr) or (not block_given? and not arr)
+      raise ArgumentError "Array of commands or a block required."
+    elsif block_given?
+      str = ""
+      string = yield str
+    elsif arr
+      string = arr.inject "" do |c| 
+        self.__send__ *c
+      end
+    end
+    @cache.define_singleton_method(name) { string }
+  end
+
+  def _cache
+    @cache = CommandCache.new
+  end
+  private :_cache
+
+end
+
+
+module MinimalMatch
+  class DebugMachine
+    include TermHelper
+
+    class << self
+      def new_thread(p_machine)
+        prog, subj, col, *zeroth = p_machine.instance_eval {
+          [@program, @subj, @threads.count, @home]
+        }
+        r = DebugMachine.new(prog,subj,col+1,zeroth)
+        r
+      end
+
+      def new_layer(p_machine,subj)
+        prog, p_subj , _, tl, _= p_machine.instance_eval {
+          [@program, @subj, @col, @home]
+        }
+        tl = p_subj.length + 2 
+        r = DebugMachine.new(prog,subj,1,[tl,0])
+        r
       end
     end
 
-    def there_and_back
-      warn "nested there_and_back" if @within
-      @within = true
-      string = output do |str|
-        str << c.save 
-        str << yield
-        str << c.restore
-      end
-      @within = false
-      string
-    end
-
-    def smacs
-      output do |str|
-        str << c.smacs 
-        str << yield
-        str << c.rmacs 
-      end
-    end
-
-    
     attr_accessor :delay
     attr_reader :home
-    attr_reader :parent
+    attr_accessor:parent
 
     def initialize(prog, subj, col = 1, zeroth = [nil,nil])
       system "mkfifo /tmp/debug_machine#{uniq_id}"
       @temp_file = File.open("/tmp/debug_machine#{uniq_id}","w+")
       @delay = 0.25 
-      @parent = true
       @program = prog.dup #duplicate the subject and instruction set 
       @subj = subj.dup 
+      @threads = []
       @col = col
       first_width = @subj.map(&:to_s).map(&:length).max + 10
       inst_width = @program.map(&:to_s).map(&:length).max + 10
-      @width = [first_width, inst_width].max
-      
+      @width = [first_width, inst_width].max + 2 # a little space
       unless zeroth.compact.empty? then
         @home = zeroth
       end
-      
-    _cache
+      _cache
+    end
 
+    def new_thread
+      t = DebugMachine.new_thread(self)
+      t.parent = self.parent || self
+      t.parent.instance_exec(t) do |t|
+        @threads << t
+      end
+      t
     end
 
     def c
-      @commands
+      @cache
     end
 
     def uniq_id 
@@ -155,13 +195,11 @@ module MinimalMatch
     end
 
     def _cache
-      @commands = DebugMachineCache.new
+      super
       @size = {:cols => `tput cols`.to_i, :rows => @program.length + 1}
-      commands = {}
-      commands[:size] = @size
-
+      
       # this is completley fucking wrong
-      commands[:info] = lambda do
+      macro :info do
         output do |str|
           str << there_and_back do
             str << c.mrcup(@size[:rows] + 1,0)
@@ -169,80 +207,77 @@ module MinimalMatch
           end
           str << '%s'
         end
-      end.call
+      end
 
-      commands[:line] = lambda do
+      #commands[:line] = lambda do
+      macro :line do
         smacs { "#{'q' * @size[:cols]}" }
-      end.call
+      end
 
       #redraw the display area, assume we're at the beggining
-      commands[:clear] = lambda do
-        output do |str|
-          str << color(2) { commands[:line] }
+      macro :clear do 
+       output do |str|
+          str << color(2) { c.line }
           (@size[:rows]).times do
             str << c.mrcup(1,0)
             str << `tput el`
           end
-          str << color(2) { commands[:line] } 
+          str << color(2) { c.line } 
           str << "\n"
         end
-      end.call
+      end
 
-      commands[:self] = lambda do
+      macro :self do 
         output do |str|
-          str << c.mrcup(2,0) # avoid the top line
+          str << c.mrcup(1,0) # avoid the top line
           @program.each_with_index do |inst,idx|
             str << c.moveto(col: (@col * @width))
             str << color(3) { " --- " }
             str << color(7) { "#{idx}: #{inst}" }
-            str << c.moveto(col: ((@col + 1) * @width))
+            str << c.moveto(col: (((@col + 1) * @width) - 2))
             str << smacs { "x\n" }
           end
         end
-      end.call
+      end
 
-      commands[:subject] = lambda do
+      macro :title do 
         output do |str|
-          str << color(15) { self.to_s + "\n" }
+          str << color(15) { self.to_s }
+        end
+      end
+
+      macro :subject do
+        output do |str|
           str << output do |str|
-            (@size[:rows] - 1).times do |idx|
+            (@size[:rows]-1).times do |idx|
               str << color(7) { " #{idx} : #{@subj[idx]} " } if @subj[idx]
               str << c.moveto(col: (@width - 2))
               str << smacs{ "x\n" }
             end
           end
         end
-      end.call
-      
-      commands.each_pair do |meth,b|
-        c = b.is_a?(Proc) ? b : lambda { b }
-        @commands.define_singleton_method meth, &c
       end
-
-      @commands
-    end
-
-    def current_position
-      system("stty -echo; tput u7; read -d R x; stty echo; echo ${x#??} > #{@temp_file.path}")
-      @temp_file.gets.chomp.split(';').map(&:to_i)
-    end
+      true
+    end    
 
     def draw_subject(hilight = nil)
       output do |str|
         str << c.subject 
-        str << c.mrcup(-(c.subject.lines.count),0)
+        str << c.mrcup(-(@size[:rows]),0)
       end
     end
 
     def update_subject(hilight)
+      raise IndexError, "Subject index out of range" if hilight >= @subj.length
+      row = hilight + 1  #accounts for the box and "return" row
       output do |str|
         str << draw_subject
         str << output do |str|
           str << c.moveto(col: 1)
-          str << c.mrcup(hilight+1,0)
+          str << c.mrcup(row,0)
           str << color(6) { "*#{hilight} : #{@subj[hilight]}*" }
           str << c.moveto(col: 1)
-          str << c.mrcup(-(hilight+1),0)
+          str << c.mrcup(-(row),0)
         end
       end
     end
@@ -250,29 +285,33 @@ module MinimalMatch
     def draw_self
       output do |str|
         str << c.self
-        str << c.mrcup(-(c.self.lines.count),0)
+        str << c.mrcup(-(@size[:rows]),0)
       end
     end
 
     def update_self(inst)
+      raise IndexError, "Instruction index out of range" if inst >= @program.length
+      row = inst + 1 
       output do |str|
         str << draw_self
         str << output do |str|
           str << c.moveto(col: ((@col * @width)))
-          str << c.mrcup(inst+1,0)
+          str << c.mrcup(row,0)
           str << c.moveto(col: ((@col * @width)))
           str << color(1) { " >>> #{inst}: #{@program[inst]}" }
-          str << c.mrcup(-(inst+1),0)
+          str << c.mrcup(-(row),0)
         end
       end
     end
     
     def puts msg
-      $stdout << (c.info % msg)
+      output :to_stdout do |str|
+        str << (c.info % msg)
+      end
     end
 
     def inspect
-      "#<#{self.class}:#{'0x%x' % self.__id__ << 1} @program=#{@program}> @delay=#{@delay}"
+      "#<#{self.class}:#{'0x%x' % self.__id__ << 1} @program=#{@program} @delay=#{@delay} @threads=#{(@threads.count+1 rescue "None")}>"
     end
 
     def to_s
@@ -280,40 +319,72 @@ module MinimalMatch
     end
     
     def display
+      (parent.display and return) if parent
       output :to_stdout do |str|
-        str << c.clear if @parent
+        str << c.clear if not parent #only the parent clears
         str << c.mrcup(-(@size[:rows]+1),0) #two lines
         str << c.moveto(col:1) # just for good measure
+        str << c.title
+        str << c.mrcup(1,0)
         str << draw_subject()
-        str << draw_self() 
-        str << c.mrcup(@size[:rows]+3,0) #to the end!
+        str << draw_self()
+        str << c.mrcup(@size[:rows]+1,0) #to the end!
       end
       # save the home position returning it
+      if not @threads.empty?
+        output c.mrcup(-(@size[:rows]+1),0)
+        @threads.each do |child|
+          output :to_stdout do |str|
+            str << child.draw_self 
+          end
+        end
+        output c.mrcup(@size[:rows]+1,0)
+      end
       @home = current_position 
     end
 
-
-    def update_inplace subj,inst
-      goto = opts[:goto] || opts[:at] || @home
+    def display_at row,col
       output :to_stdout do |str|
-        str << c.moveto(goto) 
-        update
+        str << c.save
+        str << c.moveto(row,col)
       end
+      display
+      @home
+    end
+
+    def update_inplace subj,inst,opts = nil
+      goto = opts ? (opts[:goto] || opts[:at]) : @home
+      goto[0] -= @size[:rows] + 1# move up the number of rows
+      output :to_stdout do |str|
+        str << c.save
+        str << c.moveto(*goto)
+      end
+      update subj, inst
+      output c.restore
       sleep @delay
       true
     end
         
-    def update subj, inst, opts = {}
+    def update subj, inst
       display
       output :to_stdout do |str|
-        str << there_and_back do
-          str << c.mrcup(-(@size[:rows]-1),0)
-          str << c.moveto(col:1)
-          str << update_subject(subj) if subj
-          str << update_self(inst) if inst
-        end
+        str << c.mrcup(-(@size[:rows]),0)
+        str << c.moveto(col:1)
+        str << update_subject(subj) if subj
+        str << update_self(inst) if inst
+        str << c.mrcup(@size[:rows]+1,0) #to the end! leave an extra line
       end
       true
+    end
+
+    def close
+      if @parent
+        @parent.instance_exec(self) do |t|
+          i = @threads.index t
+          @threads[i] = nil
+          @threads.compact!
+        end
+      end
     end
   end
 end

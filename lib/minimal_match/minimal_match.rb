@@ -128,26 +128,11 @@ module MinimalMatch
       pathology_count = 0
       
       #the debugger display
-      ddisplay = nil
 
       # a simple recursive loop NFA style regex matcher
-      cmp_lamb = lambda do |match_enum,self_enum, pdisplay|
-        if @debug
-          if ddisplay
-            ddisplay = DebugMachine.new_thread(pdisplay) 
-          else
-            ddisplay = DebugMachine.new(match_enum.obj, self_enum.obj)
-            ddisplay.display
-          end
-        end
-
+      cmp_lamb = lambda do |match_enum,self_enum|
         loop do
-          ddisplay.puts pathology_count += 1 if @debug
           op, *args = match_enum.current
-          
-          ddisplay.update match_enum.index, self_enum.index if @debug
-
-
           #smells funny, but i thinkg this is actually correct
           args = (args.length == 1 ? args[0] : args) rescue false
           case op 
@@ -177,7 +162,7 @@ module MinimalMatch
              # branch1
              b1 = match_enum.dup # create a new iterator to explore the other branch
              b1.index = args.first #set the index to split location
-             if cmp_lamb[b1,self_enum.dup, ddisplay]
+             if cmp_lamb[b1,self_enum.dup]
                break true
              else
                match_enum.index = args.last
@@ -190,12 +175,12 @@ module MinimalMatch
       match_enum = ReversibleEnumerator.new ma
       self_enum = ReversibleEnumerator.new match_self
 
+      debugmachine(match_enum,self_enum).display_at 0,0
+
       match_enum.next and self_enum.next #start
       res = catch :stop_now do
-        cmp_lamb.call match_enum, self_enum, ddisplay
+        cmp_lamb.call match_enum, self_enum
       end
-
-      ddisplay.close if ddisplay
 
       res and true or false
     end
