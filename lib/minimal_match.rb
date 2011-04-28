@@ -1,3 +1,5 @@
+require 'singleton'
+
 module MinimalMatch
   module ToProxy
     def to_m
@@ -11,14 +13,12 @@ module MinimalMatch
   end
 
   module Debugging
-    
     class BlackHole < BasicObject #lo i am become blackhole, eater of messages
+      include ::Singleton
       def method_missing m, *args
-        nil
+        self
       end
     end
-
-    BLACKHOLE = BlackHole.new
 
     def debug?
       @debug || false
@@ -28,9 +28,9 @@ module MinimalMatch
       @debug = arg
     end
 
-    def dbger(prog,subj)
-      return BLACKHOLE unless @debug
-      @dd ||= DebugMachine.new(prog,subj)
+    def dbg(prog = nil,subj = nil)
+      return BlackHole.instance unless @debug
+      @dd ||= self.class.debug_class.new(prog,subj)
     end
   end
 

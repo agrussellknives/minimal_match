@@ -67,11 +67,11 @@ module MinimalMatch
       @last_match = false # starts any match operation as false
 
       @debug = true
+      MatchMachine.new(match_self, match_array_orig)
       match_self = self.dup #dup self to the local so that we don't mess it up
       match_self << Sentinel
       match_array = match_array_orig.dup
     
-     
 
       #there is no need to look past END or before BEGINh
       # ignore thie optimzation for now
@@ -110,16 +110,7 @@ module MinimalMatch
       
       # use this function as the comparate to enable
       # recursive matching.
-      cond_comp = lambda do |self_val, comp_val|
-        op_sym = (self_val.is_a? Array and comp_val.is_a? Array) ? :=~ : :===
-        if op_sym == :===
-          r = self_val.__send__ op_sym, comp_val
-        else
-          r = comp_val.__send__ op_sym, self_val
-        end
-        r
-      end
-      
+           
       p ma
       first_idx = nil
       last_idx = nil
@@ -131,51 +122,11 @@ module MinimalMatch
 
       # a simple recursive loop NFA style regex matcher
       cmp_lamb = lambda do |match_enum,self_enum|
-        loop do
-          op, *args = match_enum.current
-          #smells funny, but i thinkg this is actually correct
-          args = (args.length == 1 ? args[0] : args) rescue false
-          case op 
-           when :lit # this is the only code that actually does a comparison
-             break false unless cond_comp[args, self_enum.current]
-             match_enum.next and self_enum.next #advance both
-           when :noop
-             match_enum.next #advance enumerator, but not match
-             next
-           when :save
-             unless match_hash.has_key? *args
-               match_hash[args] = { :begin => self_enum.index }
-             else
-               match_hash[args][:end] = self_enum.index
-             end
-           # not currently in use
-           when :peek
-             break false unless cond_comp[args, self_enum.peek]
-             match_enum.next and self_enum.next #advance both
-           when :match
-             last_idx = self_enum.index
-             throw :stop_now, true #because we don't know how deeply we are nested
-           when :jump
-             match_enum[args] # set the index
-             next 
-           when :split
-             # branch1
-             b1 = match_enum.dup # create a new iterator to explore the other branch
-             b1.index = args.first #set the index to split location
-             if cmp_lamb[b1,self_enum.dup]
-               break true
-             else
-               match_enum.index = args.last
-               next
-             end
-          end
-        end
-      end
       
       match_enum = ReversibleEnumerator.new ma
       self_enum = ReversibleEnumerator.new match_self
 
-      debugmachine(match_enum,self_enum).display_at 0,0
+      dbg(match_enum,self_enum).display_at 0,0
 
       match_enum.next and self_enum.next #start
       res = catch :stop_now do
@@ -185,4 +136,91 @@ module MinimalMatch
       res and true or false
     end
   end
+
+  class MatchMachine
+    class << self
+      def debug_class
+        MinimalMatch::DebugMachine
+      end
+    end
+
+    def initialize(subject, pattern) 
+      @subject = subject.dup
+      @subject << Sentinel
+      @pattern = pattern.dup
+
+      has_end, has_begin, has_epsilon = false
+      match_array
+
+    end
+
+    def loop match_enum, pattern_enum 
+      
+      loop do
+        op, *args = match_enum.current
+        #smells funny, but i thinkg this is actually correct
+        args = (args.length == 1 ? args[0] : args) rescue false
+
+        # debugging output
+        dbg_t.update_inplace match_enum.index, self_enum.index
+        dbg_t.puts_inplace "Pathology = #{pathology_count}"
+
+
+        case op 
+         when :lit # this is the only code that actually does a comparison
+           break false unless cond_comp[args, self_enum.current]
+           match_enum.next and self_enum.next #advance both
+         when :noop
+           match_enum.next #advance enumerator, but not match
+           next
+         when :save
+           unless match_hash.has_key? *args
+             match_hash[args] = { :begin => self_enum.index }
+           else
+             match_hash[args][:end] = self_enum.index
+           end
+         # not currently in use
+         when :peek
+           break false unless cond_comp[args, self_enum.peek]
+           match_enum.next and self_enum.next #advance both
+         when :match
+           last_idx = self_enum.index
+           throw :stop_now, true #because we don't know how deeply we are nested
+         when :jump
+           match_enum[args] # set the index
+           next 
+         when :split
+           # branch1
+           b1 = match_enum.dup # create a new iterator to explore the other branch
+           b1.index = args.first #set the index to split location
+           if cmp_lamb[b1,self_enum.dup]
+             dbg_t.puts_inplace "making new thread"
+             break true
+           else
+             match_enum.index = args.last
+             next
+           end
+        end
+      end
+      dbg_t.close 
+    end
+
+      
+      
+    end
+
+    def comp(subj_val,pattern_val) 
+      op_sym = (self_val.is_a? Array and comp_val.is_a? Array) ? :=~ : :===
+      if op_sym == :===
+        r = self_val.__send__ op_sym, comp_val
+      else
+        r = comp_val.__send__ op_sym, self_val
+      end
+      r
+    end
+
+
+
 end
+
+

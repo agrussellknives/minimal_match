@@ -44,7 +44,7 @@ module TermHelper
     mrcup: lambda do |row,col|
       hdir = col > 0 ? :right : :left
       vdir = row > 0 ? :down : :up 
-      [[hdir,col],[vdir,row]].inject '' do |memo, dir|
+      [[vdir,row],[hdir,col]].inject '' do |memo, dir|
         memo << (COMMANDS[dir[0]] * dir[1].abs)
       end
     end,
@@ -95,11 +95,12 @@ module TermHelper
     @within = true
     string = output do |str|
       str << c.save 
-      str << yield
+      yield(str)
       str << c.restore
     end
-    @within = false
     string
+  ensure
+    @within = false
   end
 
   def smacs
@@ -125,6 +126,37 @@ module TermHelper
     @cache.define_singleton_method(name) { string }
   end
 
+  def box row,col, width, height, opts = {}
+    opts = {:color => false, :noblank => false}.merge(opts)
+    str = there_and_back do |str|
+      str << c.setaf(opts[:color]) if opts[:color]
+      str << c.moveto(row,col)
+      str << smacs { 'm'+('q' * width)+'j' }
+      str << c.mrcup(0, -(width + 2))
+      (height-2).times do
+        str << c.mrcup(-1,0)
+        str << smacs { 'x' }
+        if opts[:noblank]
+          str << c.mrcup(0,width)
+        else
+          str << ' ' * width
+        end
+        str << smacs { 'x' }
+        str << c.mrcup(0,-(width + 2))
+      end
+      str << smacs { 'l' + ('q' * width) + 'k'}
+      str << c.reset
+      if block_given?
+        str << c.mrcup(1,0)
+        string = (yield).scan(/.{0,#{width}}/).join("\n")
+        string.each_line do |l|
+          str << c.mrcup(0,col)
+          str << l
+        end
+      end
+    end
+  end
+
   def _cache
     @cache = CommandCache.new
   end
@@ -139,7 +171,7 @@ module MinimalMatch
 
     class << self
       def new_thread(p_machine)
-        prog, subj, col, *zeroth = p_machine.instance_eval {
+        prog, subj, col, zeroth = p_machine.instance_eval {
           [@program, @subj, @threads.count, @home]
         }
         r = DebugMachine.new(prog,subj,col+1,zeroth)
@@ -156,16 +188,15 @@ module MinimalMatch
       end
     end
 
-    attr_accessor :delay
     attr_reader :home
-    attr_accessor:parent
+    attr_accessor:parent, :current_inst, :current_subj, :delay 
 
     def initialize(prog, subj, col = 1, zeroth = [nil,nil])
       system "mkfifo /tmp/debug_machine#{uniq_id}"
       @temp_file = File.open("/tmp/debug_machine#{uniq_id}","w+")
       @delay = 0.25 
-      @program = prog.dup #duplicate the subject and instruction set 
-      @subj = subj.dup 
+      @program = prog.to_a.dup #duplicate the subject and instruction set 
+      @subj = subj.to_a.dup 
       @threads = []
       @col = col
       first_width = @subj.map(&:to_s).map(&:length).max + 10
@@ -174,6 +205,8 @@ module MinimalMatch
       unless zeroth.compact.empty? then
         @home = zeroth
       end
+      @current_inst = nil
+      @current_subj = nil
       _cache
     end
 
@@ -198,17 +231,6 @@ module MinimalMatch
       super
       @size = {:cols => `tput cols`.to_i, :rows => @program.length + 1}
       
-      # this is completley fucking wrong
-      macro :info do
-        output do |str|
-          str << there_and_back do
-            str << c.mrcup(@size[:rows] + 1,0)
-            str << c.moveto(col: 0)
-          end
-          str << '%s'
-        end
-      end
-
       #commands[:line] = lambda do
       macro :line do
         smacs { "#{'q' * @size[:cols]}" }
@@ -242,7 +264,7 @@ module MinimalMatch
 
       macro :title do 
         output do |str|
-          str << color(15) { self.to_s }
+          str << color(15) { self.to_s + "   "}
         end
       end
 
@@ -268,14 +290,15 @@ module MinimalMatch
     end
 
     def update_subject(hilight)
-      raise IndexError, "Subject index out of range" if hilight >= @subj.length
+      raise IndexError, "Subject index #{hilight} out of range" if hilight >= @subj.length
       row = hilight + 1  #accounts for the box and "return" row
+      @current_subj = hilight
       output do |str|
         str << draw_subject
         str << output do |str|
           str << c.moveto(col: 1)
           str << c.mrcup(row,0)
-          str << color(6) { "*#{hilight} : #{@subj[hilight]}*" }
+          str << color(6) { "*#{@current_subj} : #{@subj[@current_subj]}*" }
           str << c.moveto(col: 1)
           str << c.mrcup(-(row),0)
         end
@@ -290,7 +313,8 @@ module MinimalMatch
     end
 
     def update_self(inst)
-      raise IndexError, "Instruction index out of range" if inst >= @program.length
+      raise IndexError, "Instruction index #{inst} out of range" if inst >= @program.length
+      @current_inst = inst
       row = inst + 1 
       output do |str|
         str << draw_self
@@ -298,18 +322,36 @@ module MinimalMatch
           str << c.moveto(col: ((@col * @width)))
           str << c.mrcup(row,0)
           str << c.moveto(col: ((@col * @width)))
-          str << color(1) { " >>> #{inst}: #{@program[inst]}" }
+          str << color(1) { " >>> #{@current_inst}: #{@program[@current_inst]}" }
           str << c.mrcup(-(row),0)
         end
       end
     end
     
     def puts msg
-      output :to_stdout do |str|
-        str << (c.info % msg)
+      display
+      str = there_and_back do |str|
+        str << c.mrcup(-(@size[:rows]+1), self.to_s.length + 5)
+        str << color(1) { ">  #{msg}   "}
       end
+      $stdout << str
+      @home
     end
 
+    def puts_inplace msg, loc = nil
+      goto = loc || @home
+      str = there_and_back do |str| 
+        str << c.moveto(*goto)
+        str << c.mrcup(-(@size[:rows]+1),0)
+        str << color(2) { c.line }
+        str << c.moveto(col:1)
+        str << c.title
+        str << color(1) { ">  #{msg}  "}
+      end
+      $stdout << str
+      true
+    end
+        
     def inspect
       "#<#{self.class}:#{'0x%x' % self.__id__ << 1} @program=#{@program} @delay=#{@delay} @threads=#{(@threads.count+1 rescue "None")}>"
     end
@@ -326,8 +368,13 @@ module MinimalMatch
         str << c.moveto(col:1) # just for good measure
         str << c.title
         str << c.mrcup(1,0)
-        str << draw_subject()
-        str << draw_self()
+        if @current_subj and @current_inst
+          str << update_subject(@current_subj)
+          str << update_self(@current_inst)
+        else
+          str << draw_subject()
+          str << draw_self()
+        end
         str << c.mrcup(@size[:rows]+1,0) #to the end!
       end
       # save the home position returning it
@@ -352,7 +399,7 @@ module MinimalMatch
       @home
     end
 
-    def update_inplace subj,inst,opts = nil
+    def update_inplace subj = nil,inst = nil,opts = nil
       goto = opts ? (opts[:goto] || opts[:at]) : @home
       goto[0] -= @size[:rows] + 1# move up the number of rows
       output :to_stdout do |str|
@@ -365,7 +412,7 @@ module MinimalMatch
       true
     end
         
-    def update subj, inst
+    def update subj = nil, inst = nil
       display
       output :to_stdout do |str|
         str << c.mrcup(-(@size[:rows]),0)
@@ -385,6 +432,16 @@ module MinimalMatch
           @threads.compact!
         end
       end
+    end
+  end
+end
+
+#enable vm debugging
+class Array
+  include MinimalMatch::Debugging
+  class << self
+    def debug_class
+      MinimalMatch::DebugMachine
     end
   end
 end

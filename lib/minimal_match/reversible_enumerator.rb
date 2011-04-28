@@ -31,6 +31,10 @@ class ReversibleEnumerator
     "#<ReversibleEnumerator:#{'%x' % self.__id__ << 1}} #{@obj.to_s}"
   end
 
+  def to_a
+    @obj
+  end
+
   def __block op
     # it seems like it's this, C, or implementing some kind of aspect
     while true
