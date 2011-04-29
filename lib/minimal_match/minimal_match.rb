@@ -41,48 +41,56 @@ module MinimalMatch
 
   def noop; NoOp.instance(); end
     
-  def compile match_array
-    is = []
-    match_array.each do |mi|
-      i = is.length
-      if mi.respond_to? :compile
-        is.concat(mi.compile(i))
-      else
-        # so it's just a standard object
-        is.concat(MatchCompile.compile(i,mi))
-      end
-    end
-    is << [:match]
-  end
-  module_function :compile
-
   module ArrayMethods
     def match match_array
-      self =~ match_array
-      @last_match || false
+      MatchMachine.new(self,pattern).run
     end
 
-    def =~ match_array_orig
-      @bind_index = 0 
-      @last_match = false # starts any match operation as false
+    def =~ pattern 
+      res = MatchMachine.new(self, pattern).run
+      res ? true : false
+    end
+  end
 
-      @debug = true
-      MatchMachine.new(match_self, match_array_orig)
-      match_self = self.dup #dup self to the local so that we don't mess it up
-      match_self << Sentinel
-      match_array = match_array_orig.dup
+  class MatchMachine
+    include Debugging
     
+    class << self
+      def debug_class
+        MinimalMatch::DebugMachine
+      end
 
-      #there is no need to look past END or before BEGINh
-      # ignore thie optimzation for now
+      def compile match_array
+        is = []
+        match_array.each do |mi|
+          i = is.length
+          if mi.respond_to? :compile
+            is.concat(mi.compile(i))
+          else
+            # so it's just a standard object
+            is.concat(MatchCompile.compile(i,mi))
+          end
+        end
+        is << [:match]
+      end
+    end
+
+    attr_accessor :match_data
+
+    def initialize(subject, pattern) 
+      @subject = subject.dup
+      @subject << Sentinel
+      @pattern = pattern.dup
+      @match_data = ArrayMatchData.new(@subject, @pattern)
+
       has_end, has_begin, has_epsilon = false
-      match_array.find_all { |i| i.kind_of? MarkerObject }.each do |val| 
+      @pattern.find_all { |i| i.kind_of? MarkerObject }.each do |val| 
         case val
           when End
-            match_array = match_array[0..match_array.index(val).prev]
+            @pattern = @pattern[0..@pattern.index(val).prev]
             has_end = true
           when Begin
-            match_array = match_array[match_array.index(val).succ..-1]
+            @pattern = @pattern[@pattern.index(val).succ..-1]
             has_begin = true
           when Repetition 
             # zero width assertions will prevent a simple length check
@@ -92,135 +100,101 @@ module MinimalMatch
         end
       end
 
-      if not has_epsilon and match_self.length < match_array.length
-         return false
+      if not has_epsilon and @subject.length < @pattern.length
+         @always_false = true
       end
-
       
       unless has_begin
-        match_array.unshift(*MatchProxy.new(Anything).non_greedy.to_a)
+        @pattern.unshift(*MatchProxy.new(Anything).non_greedy.to_a)
       end
 
       unless has_end
-        match_array.concat(MatchProxy.new(Anything).to_a)
+        @pattern.concat(MatchProxy.new(Anything).to_a)
       end
       
+      @program_enum = ReversibleEnumerator.new(MinimalMatch::MatchMachine.compile(@pattern)) 
+      @subject_enum = ReversibleEnumerator.new @subject 
 
-      ma = MinimalMatch.compile match_array
-      
-      # use this function as the comparate to enable
-      # recursive matching.
-           
-      p ma
-      first_idx = nil
-      last_idx = nil
-      match_hash = {}
+      debug(@program_enum, @subject_enum)
+      self
+    end
 
-      pathology_count = 0
-      
-      #the debugger display
+    def run
+      return false if @always_false
 
-      # a simple recursive loop NFA style regex matcher
-      cmp_lamb = lambda do |match_enum,self_enum|
-      
-      match_enum = ReversibleEnumerator.new ma
-      self_enum = ReversibleEnumerator.new match_self
-
-      dbg(match_enum,self_enum).display_at 0,0
-
-      match_enum.next and self_enum.next #start
+      debug.display_at 0,0
+      @pathology_count = 0
+      @match_hash = {}
+      @program_enum.next and @subject_enum.next
       res = catch :stop_now do
-        cmp_lamb.call match_enum, self_enum
+        process @program_enum, @subject_enum
       end
-
-      res and true or false
-    end
-  end
-
-  class MatchMachine
-    class << self
-      def debug_class
-        MinimalMatch::DebugMachine
-      end
+      puts @match_hash
+      res ? @match_data : false
     end
 
-    def initialize(subject, pattern) 
-      @subject = subject.dup
-      @subject << Sentinel
-      @pattern = pattern.dup
-
-      has_end, has_begin, has_epsilon = false
-      match_array
-
-    end
-
-    def loop match_enum, pattern_enum 
+    def process pattern_enum, subject_enum, thread = nil
+      @pathology_count += 1
       
       loop do
-        op, *args = match_enum.current
+        op, *args = pattern_enum.current
         #smells funny, but i thinkg this is actually correct
         args = (args.length == 1 ? args[0] : args) rescue false
-
+        
         # debugging output
-        dbg_t.update_inplace match_enum.index, self_enum.index
-        dbg_t.puts_inplace "Pathology = #{pathology_count}"
-
+        debug.thread(thread).update_inplace subject_enum.index, pattern_enum.index
+        debug.puts_inplace "Pathology = #{@pathology_count}"
 
         case op 
          when :lit # this is the only code that actually does a comparison
-           break false unless cond_comp[args, self_enum.current]
-           match_enum.next and self_enum.next #advance both
+           return false unless comp(args, subject_enum.current)
+           pattern_enum.next and subject_enum.next #advance both
          when :noop
-           match_enum.next #advance enumerator, but not match
+           pattern_enum.next #advance enumerator, but not match
            next
          when :save
-           unless match_hash.has_key? *args
-             match_hash[args] = { :begin => self_enum.index }
+           unless @match_hash.has_key? *args
+             @match_hash[args] = {}
+             @match_hash[args][:begin] = subject_enum.index
            else
-             match_hash[args][:end] = self_enum.index
+             @match_hash[args][:end] = subject_enum.index
            end
          # not currently in use
          when :peek
-           break false unless cond_comp[args, self_enum.peek]
-           match_enum.next and self_enum.next #advance both
+           return false unless comp(args, subject_enum.peek)
+           pattern_enum.next and subject_enum.next #advance both
          when :match
-           last_idx = self_enum.index
+           last_idx = subject_enum.index
            throw :stop_now, true #because we don't know how deeply we are nested
          when :jump
-           match_enum[args] # set the index
+           pattern_enum[args] # set the index
            next 
          when :split
            # branch1
-           b1 = match_enum.dup # create a new iterator to explore the other branch
-           b1.index = args.first #set the index to split location
-           if cmp_lamb[b1,self_enum.dup]
-             dbg_t.puts_inplace "making new thread"
-             break true
+           b1 = pattern_enum.dup # create a new iterator to explore the other branch set the index to split location
+           b1.index = args.first
+           if process(b1,subject_enum.dup, debug.new_thread)
+             return true
            else
-             match_enum.index = args.last
+             pattern_enum.index = args.last
              next
            end
         end
       end
-      dbg_t.close 
-    end
-
-      
-      
+    ensure
+      thread.close if thread
     end
 
     def comp(subj_val,pattern_val) 
-      op_sym = (self_val.is_a? Array and comp_val.is_a? Array) ? :=~ : :===
+      op_sym = (subj_val.is_a? Array and pattern_val.is_a? Array) ? :=~ : :===
       if op_sym == :===
-        r = self_val.__send__ op_sym, comp_val
+        r = subj_val.__send__ op_sym, pattern_val 
       else
-        r = comp_val.__send__ op_sym, self_val
+        r = pattern_val.__send__ op_sym, subj_val 
       end
       r
     end
-
-
-
+  end
 end
 
 

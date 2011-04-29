@@ -19,18 +19,24 @@ module MinimalMatch
         self
       end
     end
-
-    def debug?
-      @debug || false
+    
+    def self.included receiver
+      receiver.extend ClassMethods
     end
+    
+    module ClassMethods
+      def debug?
+        @debug || false
+      end
 
-    def debug= arg
-      @debug = arg
+      def debug= arg
+        @debug = arg
+      end
     end
-
-    def dbg(prog = nil,subj = nil)
-      return BlackHole.instance unless @debug
-      @dd ||= self.class.debug_class.new(prog,subj)
+    
+    def debug(prog = nil,subj = nil)
+      return BlackHole.instance unless self.class.debug? 
+      @debugger ||= self.class.debug_class.new(prog,subj)
     end
   end
 

@@ -134,19 +134,19 @@ describe "simple array matching" do
 
   describe "matches anything" do
     it "simply" do
-      ([1,2,3,4,5] =~ [MinimalMatch.anything,2,3,4,5]).should == true
-      ([1,2,3,4,5] =~ [MinimalMatch.anything]).should == true
-      ([1,2,3,4,5] =~ [MinimalMatch.anything,3]).should == false
+      ([1,2,3,4,5] =~ [Anything,2,3,4,5]).should == true
+      ([1,2,3,4,5] =~ [Anything]).should == true
+      ([1,2,3,4,5] =~ [Anything,3]).should == false
     end
 
     it "recursively" do
-      ([1,[2,3,[4,5,6]]] =~ [1,[2,MinimalMatch.anything,[4,MinimalMatch.anything,6]]]).should == true
-      ([1,2,[3,4,5]] =~ [1,MinimalMatch.anything,[3,4]]).should == true
+      ([1,[2,3,[4,5,6]]] =~ [1,[2,Anything,[4,Anything,6]]]).should == true
+      ([1,2,[3,4,5]] =~ [1,Anything,[3,4]]).should == true
     end
   end
 
   it " matches things that might not be there" do
-    m = [1,[2,MinimalMatch.maybe(3),[4]]]
+    m = [1,[2,~m(3),[4]]]
     #([1,[2,3,[4]]] =~ m).should == true
     ([1,[2,[4]]] =~ m).should == true
   end

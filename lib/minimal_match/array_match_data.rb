@@ -1,8 +1,8 @@
 module MinimalMatch
   class ArrayMatchData
-    def initialize(array, pattern, f_index, e_index)
-      @first_index = f_index
-      @end_index = e_index
+    def initialize(array, pattern)
+      @first_index = nil 
+      @end_index = nil 
       @array = array
       @pattern = pattern
     end
@@ -20,7 +20,9 @@ module MinimalMatch
     end
 
     def inspect
-      "#<ArrayMatchData:0x#{'%x' % (self.__id__ << 1)} pattern: #{@pattern} array: #{@array} begin: #{@first_index} end: #{@end_index}>"
+      # recompile pattern to string leaving off the unanchored matches
+      p_string = @pattern.map(&:to_s)
+      "#<ArrayMatchData:0x#{'%x' % (self.__id__ << 1)} pattern: #{p_string} array: #{@array[0..-2]} begin: #{@first_index} end: #{@end_index}>"
     end
 
     def length
