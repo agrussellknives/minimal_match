@@ -44,7 +44,6 @@ module MinimalMatch
     end
 
     def method_missing meth, *args
-      puts "sent #{meth} with #{args} from #{__sender__}::#{__caller__}"
       res = @comp_obj.__send__ meth, *args
       if is_proxy? res then res else MatchProxy.new(res) end # return a new proxy object
     end
@@ -77,6 +76,7 @@ module MinimalMatch
     end
 
     def to_s
+      debugger
       str = "m("
       str << @comp_obj.collect do |i|
         if is_group? i
@@ -99,11 +99,6 @@ module MinimalMatch
       puts "compile with #{bind_index} from #{__sender__}::#{__caller__}"
       run = [[:save, @bind_name || bind_index ]] # replace this with bind_index
       @comp_obj.each_with_index.each_with_object(run) do |(mi, idx), memo|
-        $stdout << <<-INFO
-          memo : #{memo.to_s}
-          mi : #{mi.to_s}
-          idx : #{idx.to_s}
-        INFO
         memo << mi.compile(bind_index+idx+1)
       end
       run << [:save, @bind_name || bind_index]
@@ -114,12 +109,16 @@ module MinimalMatch
       puts "respond to missing from match proxy group"
     end
     
+    # i don't know if this is really the correct way to do this or not....
     def method_missing meth, *args
-      $stdout.puts "distributing method call #{meth} to match_obj group"
-      v = @comp_obj.map do |c|
-        c.__send__ meth, *args
+      res = @comp_obj.__send__ meth, *args
+      if is_proxy? res and is_group? res then
+        res
+      elsif res.is_a? ::Enumerable
+        MatchProxyGroup.new(*res) # return a new proxy group 
+      else
+        res
       end
-      MatchProxyGroup.new(*v)
     end
   end
 end

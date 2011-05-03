@@ -1,4 +1,5 @@
 require 'tempfile'
+require 'pry'
 
 # it is so tempting to make this into a whole little gem
 module TermHelper
@@ -18,6 +19,10 @@ module TermHelper
     
     setaf = `tput setaf`.split(/(%.*?(?=%)|;)/)
     setaf = "#{setaf[0]}%s#{setaf[-1]}"
+    
+    setab = `tput setab`.split(/(%.*?(?=%)|;)/)
+    setab = "#{setab[0]}%s#{setab[-1]}"
+
       
     COMMANDS = {
     save: `tput sc`,
@@ -29,14 +34,24 @@ module TermHelper
     right: `tput cuf1`,
     up: `tput cuu1`,
     down: `tput cud1`,
-    test: 'test',
+    setab: lambda do |color|
+      str = ""
+      if color < 8
+        str = "4#{color}"
+      elsif color < 16
+        str = "10#{color}"
+      else 
+        str = "48;5;#{color}"
+      end
+      setab % str
+    end,
     setaf: lambda do |color|
       str = ""
       if color < 8
         str = "3#{color}"
       elsif color < 16
         str = "9#{color-8}"
-      elsif
+      else
         str = "38;5;#{color}"
       end
       setaf % str 
@@ -74,13 +89,26 @@ module TermHelper
     string
   end
 
+  def uniq_id 
+    @uniq_id ||= "#{"%x" % (Time.now.to_i + self.__id__).hash}".upcase
+  end
+
   def current_position
     #taking bids for a better implementation of this
-    temp_file ||= @temp_file
-    temp_file ||= Tempfile.new()
-    system("stty -echo; tput u7; read -d R x; stty echo; echo ${x#??} > #{temp_file.path}")
-    temp_file.gets.chomp.split(';').map(&:to_i)
+    unless @temp_file 
+      system "mkfifo /tmp/#{self.class}_#{uniq_id}"
+      @temp_file = File.open("/tmp/#{self.class}_#{uniq_id}","w+")
+      ObjectSpace.define_finalizer(self, TermHelper.remove_tempfile(@temp_file.path)) 
+    end 
+
+    system("stty -echo; tput u7; read -d R x; stty echo; echo ${x#??} >> #{@temp_file.path}")
+    @temp_file.gets.chomp.split(';').map(&:to_i)
   end
+  
+  def remove_tempfile(path)
+    proc { system "rm #{path}"; } 
+  end
+  module_function :remove_tempfile
 
   def color color
     output do |str|
@@ -173,15 +201,11 @@ end
 module MinimalMatch
   class DebugMachine
     include TermHelper
-    include ObjectSpace
 
     attr_reader :home
     attr_accessor:parent, :current_inst, :current_subj, :delay 
 
     def initialize(prog, subj, col = 1, zeroth = [nil,nil])
-      system "mkfifo /tmp/debug_machine#{uniq_id}"
-      @temp_file = File.open("/tmp/debug_machine#{uniq_id}","w+")
-      define_finalizer(self, lambda { system "rm /tmp/debug_machine#{uniq_id}" } )
       @delay = 0.25 
       @program = prog.to_a.dup #duplicate the subject and instruction set 
       @subj = subj.to_a.dup 
@@ -207,10 +231,6 @@ module MinimalMatch
         @threads << t
       end
       t
-    end
-
-    def uniq_id 
-      @uniq_id ||= "#{"%x" % (Time.now.to_i + self.__id__).hash}".upcase
     end
 
     def _cache
@@ -254,21 +274,21 @@ module MinimalMatch
         raise IndexError, "Subject index #{hilight} out of range" 
       end
       string = output do |str|
+        str << c.mrcup(1,0)
         (@size[:rows]-1).times do |idx|
           out = ""
+          subj = @subj[idx].to_s
+          subj = subj[0..@width-14] + '...' if subj.length > @width - 11
           if idx == @current_subj
-            out = color(6) { "*#{idx} : #{@subj[idx]}*" }
+            out = color(6) { "*#{"%03d" % idx} : #{subj}*" }
           else
-            out = color(7) { " #{idx} : #{@subj[idx]} " } if @subj[idx]
-          end
-          if out.length > @width
-            out.slice!(0,@width-3)
-            out << "..."
+            out = color(7) { " #{"%03d" % idx} : #{subj} " } if @subj[idx]
           end
           str << out
           str << c.moveto(col: (@width - 2))
           str << smacs{ "x\n" }
         end
+        str << c.mrcup(-(@size[:rows]),0)
       end
     end
 
@@ -290,16 +310,13 @@ module MinimalMatch
         @program.each_with_index do |inst,idx|
           str << c.moveto(col:(at_col * @width))
           out = ""
+          inst = inst.to_s
+          inst = inst[0..@width-14] + '...' if inst.length > @width - 11 
           if idx == @current_inst
-            out = color(1) { " >>> #{idx}: #{inst}"}
+            out = color(1) { " > #{"%03d" % idx}: #{inst}"}
           else
-            out = color(3) { " --- " }
-            out << color(7) { "#{idx}: #{inst}" }
-          end
-          if out.length > @width
-            debugger
-            out.slice!(0,@width-3)
-            out << "..."
+            out = color(3) { " - " }
+            out << color(7) { "#{"%03d" % idx}: #{inst}" }
           end
           str << out
           str << c.moveto(col:((at_col + 1) * @width)-1)
@@ -358,14 +375,12 @@ module MinimalMatch
     
     def display
       (parent.display and return) if parent
-      @message = (@threads.count + 1) * @width
       output :to_stdout do |str|
         str << c.box if not parent #only the parent clears
         str << c.mrcup(-(@size[:rows]+1),0) #two lines
         str << c.moveto(col:1) # just for good measure
         str << title
         str << c.mrcup(1,0)
-        str << draw_subject()
       end
       # save the home position returning it
       if not @threads.empty?
@@ -395,6 +410,7 @@ module MinimalMatch
         @threads[collapsed..-1].each_with_index do |child,col|
           output :to_stdout do |str|
             str << child.draw_self(col+1)
+            str << child.draw_subject
           end
         end
         output c.mrcup(@size[:rows]+1,0)
@@ -438,12 +454,6 @@ module MinimalMatch
           @threads[i] = nil
           @threads.compact!
         end
-      end
-      output :to_stdout do |str|
-        str << c.save
-        str << c.moveto(*@home)
-        str << c.clear
-        str << c.restore
       end
     end
   end

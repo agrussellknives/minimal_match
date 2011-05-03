@@ -4,6 +4,7 @@ module MinimalMatch
   # a minimal match object should implement the _compile
   # method
   module MatchCompile
+  extend ::MinimalMatch::ProxyOperators
   #bytecodes and their arity
   BYTECODES = {
    split: 2,
@@ -57,10 +58,15 @@ module MinimalMatch
     end
     module_function :normalize_compile
   end
-  MatchCompile.extend MinimalMatch::ProxyOperators
-
+  
   # provides introspect capabilities for matchobject heirarcy
   class MinimalMatchObject < BasicObject
+    include ::Kernel
+    include ::MinimalMatch::ProxyOperators
+    include ::MinimalMatch::ToProxy
+    include ::MinimalMatch::MatchCompile
+    include ::MinimalMatch::Debugging
+
     # Abstract
     #
     def class
@@ -113,15 +119,7 @@ module MinimalMatch
     
   end
   # since you can't look up the module from that scope
-  MinimalMatchObject.send :include, Kernel # so you can raise, etc
-
-  # enable the is_proxy? test-like-thingy in matchobjects
-  MinimalMatchObject.send :include, MinimalMatch::ProxyOperators
-  MinimalMatchObject.send :include, MinimalMatch::ToProxy # WHOA, DID YOU SEE YOUR MIND GET BLOWN
-  MinimalMatchObject.send :include, MinimalMatch::MatchCompile
-  MinimalMatchObject.send :include, MinimalMatch::Debugging
-
-
+ 
   class AbstractMatchProxy < MinimalMatchObject
     attr_accessor :comp_obj
 

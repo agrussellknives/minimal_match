@@ -61,6 +61,11 @@ module MinimalMatch
       end
 
       def compile match_array
+        # directly compile raw match group
+        if match_array.respond_to? :compile
+          return match_array.compile
+        end
+
         is = []
         match_array.each do |mi|
           i = is.length
@@ -111,6 +116,8 @@ module MinimalMatch
       unless has_end
         @pattern.concat(MatchProxy.new(Anything).to_a)
       end
+
+      debugger
       
       @program_enum = ReversibleEnumerator.new(MinimalMatch::MatchMachine.compile(@pattern)) 
       @subject_enum = ReversibleEnumerator.new @subject 
@@ -143,7 +150,7 @@ module MinimalMatch
         
         # debugging output
         debug.thread(thread).update_inplace subject_enum.index, pattern_enum.index
-        debug.puts_inplace "Pathology = #{@pathology_count}"
+        debug.puts_inplace "Pathology = #{@pathology_count} Idx = #{[subject_enum.index, pattern_enum.index]}"
 
         case op 
          when :lit # this is the only code that actually does a comparison

@@ -53,9 +53,9 @@ describe "expression evaluation" do
       me = m(1)*4
       me.to_s.should == 'm(1)[4..4]'
     end
- end
+  end
 
- describe "should compile non-greedy matchers" do
+  describe "should compile non-greedy matchers" do
     it "should do one or more" do
       me = +(m(1,2)).non_greedy
       me.to_s.should == '+(m(1,2)).non_greedy'
@@ -130,6 +130,19 @@ describe "simple array matching" do
       #because position two of the array is not [3,4]
       ([1,2,[3,4,5]] =~ [1,[3,4]]).should == false
     end
+
+    it "matches simple proxies" do
+      ([1,2,3] =~ [m(1), m(2), m(3)])
+      (['a','b','c'] =~ [m('a'),m('b'), m('c')]).should == true
+      ([{:foo => :bar},{:baz => :bab}] =~ [m({:foo => :bar}),m({:baz => :bab})]).should == true
+      ([1,2,3] =~ [m(3),m(2),m(1)]).should == false
+    end
+  end
+
+  describe "groups matches" do
+    it "should group matches" do
+      ([1,2,3] =~ [1,m(2,3)]).should == true
+    end
   end
 
   describe "matches anything" do
@@ -146,9 +159,9 @@ describe "simple array matching" do
   end
 
   it " matches things that might not be there" do
-    m = [1,[2,~m(3),[4]]]
-    #([1,[2,3,[4]]] =~ m).should == true
-    ([1,[2,[4]]] =~ m).should == true
+    ([1,2,3,4,5] =~ [1,2,~m(3),4,5]).should == true
+    ([1,2,4,5] =~ [1,2,~m(3),4,5]).should == true
+    ([1,[2,[4]]] =~ [1,[2,~m(3),[4]]]).should == true
   end
 
   it "returns index of pattern" do
@@ -162,31 +175,17 @@ describe "simple array matching" do
     ([1,2,3,[4],5].match([[4]]).begin).should == 3
   end
 
-  describe "splat matching" do
-    it "matches greedily with splat" do
-      ([1,2,3,4,5] =~ [1,*MinimalMatch.anything,5]).should == true
-      ([1,2,3,4,5] =~ [1,*MinimalMatch.anything]).should == true
-      # ends with something not in the array
-      ([1,2,3,4,5] =~ [1,*MinimalMatch.anything,6]).should == false
-    end
-
-    it "matches things at the end" do
-      ([1,2,3,4,5] =~ [*MinimalMatch.anything, 5]).should == true
-      ([1,2,3,4,5,6] =~ [*MinimalMatch.anything, 5,6]).should == true
-      ([1,2,3,4,5,6,7,8] =~ [*MinimalMatch.anything,5,6]).should == true
-      ([1,2,3,4,5,6] =~ [*MinimalMatch.anything, 5]).should == true
+  describe "keene star" do
+    it "matches greedily with keenestar" do
+      ([1,2,3,4,5] =~ [1,*Anything,5]).should == true
+      ([1,2,3,4,5] =~ [1,*Anything]).should == true
+      ([1,2,3,4,5] =~ [1,*Anything,6]).should == false
     end
 
     it "matches recursively with splat" do
-      ([1,2,3,4,[3,4,5]] =~ [1,*MinimalMatch.anything,[3,4]]).should == true
-      ([1,2,[3,4],5,6,[7,8]] =~ [1,2,[3,4],*MinimalMatch.anything, [7,8]]).should == true
-      ([1,2,[3,4,[5,6,7,8]],9,10] =~ [1,2,[3,4,[5,6,7,8]], *MinimalMatch.anything]).should == true
-    end
-
-    it "matches multiple splats" do
-      ([1,2,3,4,5,6,7,8] =~ [1,*MinimalMatch.anything,5,*MinimalMatch.anything,8]).should == true
-      ([1,2,[3,4,5],[6,7,8,9]] =~ [1,2,[3,MinimalMatch.anything,5],[6,*MinimalMatch.anything,9]]).should == true
-      ([1,2,[3,4,4.5,4.75,5],[6,8,8,9]] =~ [1,2,[3,*MinimalMatch.anything,5],[6,*MinimalMatch.anything,9]]).should == true
+      ([1,2,3,4,[3,4,5]] =~ [1,*Anything,[3,4]]).should == true
+      ([1,2,[3,4],5,6,[7,8]] =~ [1,2,[3,4],*Anything, [7,8]]).should == true
+      ([1,2,[3,4,[5,6,7,8]],9,10] =~ [1,2,[3,4,[5,6,7,8]], *Anything]).should == true
     end
   end
 
