@@ -75,13 +75,11 @@ module MinimalMatch
     end
   end
   module_function :m
-    
 end
 
-require 'minimal_match/minimal_match'
-require 'minimal_match/minimal_search'
+require_relative 'minimal_match/minimal_match'
+require_relative 'minimal_match/minimal_search'
 
 #remove this!
-require 'minimal_match/kernel'
-require 'minimal_match/debug_machine'
-
+require_relative 'minimal_match/kernel'
+require_relative 'minimal_match/debug_machine'
