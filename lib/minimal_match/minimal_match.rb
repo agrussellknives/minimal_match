@@ -9,6 +9,7 @@ module MinimalMatch
 
   class MarkerObject < MinimalMatchObject
     # abstract position marker
+    include ::Singleton
     def ===
       false
     end
@@ -24,7 +25,6 @@ module MinimalMatch
 
     private :initialize
   end
-  MarkerObject.__send__ :include, Singleton
 
   class EndClass < MarkerObject; end
   class BeginClass < MarkerObject; end
@@ -54,6 +54,7 @@ module MinimalMatch
 
   class MatchMachine
     include Debugging
+    extend MinimalMatch::ProxyOperators
     
     class << self
       def debug_class
@@ -62,7 +63,7 @@ module MinimalMatch
 
       def compile match_array
         # directly compile raw match group
-        if match_array.respond_to? :compile
+        if is_proxy? match_array
           return match_array.compile
         end
 
@@ -166,6 +167,8 @@ module MinimalMatch
            else
              @match_hash[args][:end] = subject_enum.index
            end
+           pattern_enum.next
+           next
          # not currently in use
          when :peek
            return false unless comp(args, subject_enum.peek)

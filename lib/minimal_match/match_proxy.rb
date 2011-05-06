@@ -76,7 +76,6 @@ module MinimalMatch
     end
 
     def to_s
-      debugger
       str = "m("
       str << @comp_obj.collect do |i|
         if is_group? i
