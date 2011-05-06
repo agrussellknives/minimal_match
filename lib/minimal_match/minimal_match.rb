@@ -1,6 +1,10 @@
 #necessary sub files
+
+module
+
 require 'fiber'
 require 'singleton'
+
 #
 %w{ minimal_match_object match_proxy match_multiplying special_literals
     array_match_data reversible_enumerator}.each { |mod| require "#{File.dirname(__FILE__)}/#{mod}"}
@@ -60,7 +64,6 @@ module MinimalMatch
       def debug_class
         MinimalMatch::DebugMachine
       end
-
       def compile match_array
         # directly compile raw match group
         if is_proxy? match_array
