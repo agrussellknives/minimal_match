@@ -45,7 +45,11 @@ module MinimalMatch
 
     def method_missing meth, *args
       res = @comp_obj.__send__ meth, *args
-      if is_proxy? res then res else MatchProxy.new(res) end # return a new proxy object
+      if [true, false, nil].include? res or is_proxy? res 
+        res 
+      else 
+        MatchProxy.new(res) 
+      end # return a new proxy object unless it's t,f,n 
     end
   end
 
@@ -76,7 +80,6 @@ module MinimalMatch
     end
 
     def to_s
-      debugger
       str = "m("
       str << @comp_obj.collect do |i|
         if is_group? i

@@ -1,7 +1,5 @@
 #necessary sub files
 
-module
-
 require 'fiber'
 require 'singleton'
 
@@ -58,6 +56,7 @@ module MinimalMatch
 
   class MatchMachine
     include Debugging
+    extend MinimalMatch::ProxyOperators
     
     class << self
       def debug_class
@@ -65,17 +64,12 @@ module MinimalMatch
       end
       def compile match_array
         # directly compile raw match group
-        if match_array.respond_to? :compile
-          return match_array.compile
-        end
-
         is = []
-        match_array.each do |mi|
-          i = is.length
-          if mi.respond_to? :compile
-            is.concat(mi.compile(i))
-          else
-            # so it's just a standard object
+        if is_group? match_array
+          is.concat(match_array.compile)
+        else
+          match_array.each do |mi|
+            i = is.length
             is.concat(MatchCompile.compile(i,mi))
           end
         end
@@ -86,19 +80,19 @@ module MinimalMatch
     attr_accessor :match_data
 
     def initialize(subject, pattern) 
-      @subject = subject.dup
-      @subject << Sentinel
-      @pattern = pattern.dup
-      @match_data = ArrayMatchData.new(@subject, @pattern)
+      subject = subject.dup
+      subject << Sentinel
+      pattern = pattern.dup
+      @match_data = ArrayMatchData.new(subject, pattern)
 
       has_end, has_begin, has_epsilon = false
-      @pattern.find_all { |i| i.kind_of? MarkerObject }.each do |val| 
+      pattern.find_all { |i| i.kind_of? MarkerObject }.each do |val| 
         case val
           when End
-            @pattern = @pattern[0..@pattern.index(val).prev]
+            pattern = pattern[0..pattern.index(val).prev]
             has_end = true
           when Begin
-            @pattern = @pattern[@pattern.index(val).succ..-1]
+            pattern = pattern[pattern.index(val).succ..-1]
             has_begin = true
           when Repetition 
             # zero width assertions will prevent a simple length check
@@ -108,22 +102,20 @@ module MinimalMatch
         end
       end
 
-      if not has_epsilon and @subject.length < @pattern.length
+      if not has_epsilon and subject.length < pattern.length
          @always_false = true
       end
       
       unless has_begin
-        @pattern.unshift(*MatchProxy.new(Anything).non_greedy.to_a)
+        pattern.unshift(*MatchProxy.new(Anything).non_greedy.to_a)
       end
 
       unless has_end
-        @pattern.concat(MatchProxy.new(Anything).to_a)
+        pattern.concat(MatchProxy.new(Anything).to_a)
       end
-
-      debugger
       
-      @program_enum = ReversibleEnumerator.new(MinimalMatch::MatchMachine.compile(@pattern)) 
-      @subject_enum = ReversibleEnumerator.new @subject 
+      @program_enum = ReversibleEnumerator.new(MinimalMatch::MatchMachine.compile(pattern)) 
+      @subject_enum = ReversibleEnumerator.new subject 
 
       debug(@program_enum, @subject_enum)
       self
