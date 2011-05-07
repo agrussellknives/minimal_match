@@ -54,56 +54,29 @@ module MinimalMatch
     end
   end
 
-  class MatchMachine
-    include Debugging
-    extend MinimalMatch::ProxyOperators
+  class MatchPattern
+    attr_reader :has_end, :has_begin, :has_epsilon, :length
     
-    class << self
-      def debug_class
-        MinimalMatch::DebugMachine
+    def initialize pattern
+      if is_group? pattern
+        pattern = [pattern] # so we don't capture the leading and trailing kleens
       end
-      def compile match_array
-        # directly compile raw match group
-       is = []
-        if is_group? match_array
-          is.concat(match_array.compile)
-        else
-          match_array.each do |mi|
-            i = is.length
-            is.concat(MatchCompile.compile(i,mi))
-          end
-        end
-        is << [:match]
-      end
-    end
 
-    attr_accessor :match_data
-
-    def initialize(subject, pattern) 
-      subject = subject.dup
-      subject << Sentinel
-      pattern = pattern.dup
-      @match_data = ArrayMatchData.new(subject, pattern)
-
-      has_end, has_begin, has_epsilon = false
+      @has_end, @has_begin, @has_epsilon = false
       pattern.find_all { |i| i.kind_of? MarkerObject }.each do |val| 
         case val
           when End
             pattern = pattern[0..pattern.index(val).prev]
-            has_end = true
+            @has_end = true
           when Begin
             pattern = pattern[pattern.index(val).succ..-1]
-            has_begin = true
+            @has_begin = true
           when Repetition 
             # zero width assertions will prevent a simple length check
             # optmization. it's probably possible to figure this
             # out, but we'll skip it for now
-            has_epsilon = true
+            @has_epsilon = true
         end
-      end
-
-      if not has_epsilon and subject.length < pattern.length
-         @always_false = true
       end
      
       unless has_begin
@@ -113,8 +86,52 @@ module MinimalMatch
       unless has_end
         pattern.push(MatchProxy.new(Anything).kleene)
       end
+
+      @pattern = pattern
+    end
+
+    def compiled
+      @compiled ||= compile(pattern)
+    end
+
+    def recompile
+      @compiled = compile(pattern)
+    end
+
+    def compile pattern 
+      # directly compile raw match group
+      is = []
+      pattern.each do |mi|
+        i = is.length
+        is.concat(MatchCompile.compile(i,mi))
+      end
+      is << [:match]
+    end
+  end
+
+  class MatchMachine
+    include Debugging
+    extend MinimalMatch::ProxyOperators
+    
+    class << self
+      def debug_class
+        MinimalMatch::DebugMachine
+      end
+    end
+
+    attr_accessor :match_data
+
+    def initialize(subject, pattern) 
+      subject = subject.dup
+      subject << Sentinel
+      pattern = pattern.respond_to?(:compiled) ? MinimalMatch::MatchPattern.new(pattern.dup) : pattern
+      @match_data = ArrayMatchData.new(subject, pattern)
       
-      @program_enum = ReversibleEnumerator.new(MinimalMatch::MatchMachine.compile(pattern)) 
+      if not pattern.has_epsilon and subject.length < pattern.length
+         @always_false = true
+      end
+
+      @program_enum = ReversibleEnumerator.new pattern.compiled
       @subject_enum = ReversibleEnumerator.new subject 
 
       debug(@program_enum, @subject_enum)
