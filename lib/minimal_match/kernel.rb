@@ -15,6 +15,10 @@ module Kernel
     MinimalMatch.m *args
   end
 
+  def mg arg
+    MinimalMatch.mg arg
+  end
+
   def is_proxy? *args
     MinimalMatch.is_proxy? *args
   end

@@ -50,10 +50,12 @@ module MinimalMatch
 # Array::Anything.  it will always be equal to whatever you compare it to 
   class AnythingClass < MinimalMatchObject
     # it matches anything OTHER than another minimal matchobject
+    include ::Singleton
+
     def === who_cares
       if who_cares == Sentinel
         true
-      elsif who_cares.kind_of? MinimalMatchObject and not who_cares.eql? self and not
+      elsif who_cares.kind_of? MinimalMatchObject and not who_cares.eql? self
         false
       else
         true
@@ -66,11 +68,5 @@ module MinimalMatch
     end
     alias :inspect :to_s
   end
-  AnythingClass.__send__ :include, Singleton
-
-  def anything
-    AnythingClass.instance()
-  end
-  module_function :anything
 end
 #  vim: set ts=2 sw=2 tw=0 :

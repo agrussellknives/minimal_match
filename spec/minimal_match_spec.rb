@@ -177,15 +177,23 @@ describe "simple array matching" do
 
   describe "keene star" do
     it "matches greedily with keenestar" do
-      ([1,2,3,4,5] =~ [1,*Anything,5]).should == true
-      ([1,2,3,4,5] =~ [1,*Anything]).should == true
-      ([1,2,3,4,5] =~ [1,*Anything,6]).should == false
+      # these two match using the same NFA 
+      ([1,2,3,4,5] =~ [1,*m(Anything),5]).should == true
+      ([1,2,3,4,5] =~ [1,*m(Anything)]).should == true
+
+      
+      ([1,2,3,4,5] =~ [1,*m(Anything),4]).should == true
+      ([1,2,3,4,5] =~ [1,*m(Anything),6]).should == false
     end
 
+    it "matches non-greedy" do
+      ([1,2,3,4,5] =~ [1,*!m(Anything),5]).should == true
+
+
     it "matches recursively with splat" do
-      ([1,2,3,4,[3,4,5]] =~ [1,*Anything,[3,4]]).should == true
-      ([1,2,[3,4],5,6,[7,8]] =~ [1,2,[3,4],*Anything, [7,8]]).should == true
-      ([1,2,[3,4,[5,6,7,8]],9,10] =~ [1,2,[3,4,[5,6,7,8]], *Anything]).should == true
+      ([1,2,3,4,[3,4,5]] =~ [1,*m(Anything),[3,4]]).should == true
+      ([1,2,[3,4],5,6,[7,8]] =~ [1,2,[3,4],*m(Anything), [7,8]]).should == true
+      ([1,2,[3,4,[5,6,7,8]],9,10] =~ [1,2,[3,4,[5,6,7,8]], *m(Anything)]).should == true
     end
   end
 

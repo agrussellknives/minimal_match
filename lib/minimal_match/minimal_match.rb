@@ -105,13 +105,13 @@ module MinimalMatch
       if not has_epsilon and subject.length < pattern.length
          @always_false = true
       end
-      
+     
       unless has_begin
-        pattern.unshift(*MatchProxy.new(Anything).non_greedy.to_a)
+        pattern.unshift(MatchProxy.new(Anything).kleene.non_greedy)
       end
 
       unless has_end
-        pattern.concat(MatchProxy.new(Anything).to_a)
+        pattern.push(MatchProxy.new(Anything).kleene)
       end
       
       @program_enum = ReversibleEnumerator.new(MinimalMatch::MatchMachine.compile(pattern)) 

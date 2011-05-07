@@ -16,18 +16,16 @@ module MinimalMatch
    match: 0
   }
   #BYTECODES = [:split,:lit,:jump,:save,:match]   
-    def compile at_index=nil, obj=nil
+    def compile at_index=nil, obj=self
       # for match proxies respond to goes to the subject
       # so we try this and catch the error 
       begin
-        r = self._compile(at_index || 0)
+        r = obj._compile(at_index || 0)
       rescue NoMethodError => e
         raise e unless e.name == :_compile #pass any other exception
-        r = if obj and is_proxy? obj
-          [:lit, obj.comp_obj]
-        elsif not obj and is_proxy? self
-          [:lit, @comp_obj]
-        else
+        r = if is_proxy? obj
+          [:lit, obj.comp_obj] # i don't think this is reachable
+        else 
           [:lit, obj]
         end
       end
