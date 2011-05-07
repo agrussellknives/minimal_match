@@ -136,6 +136,10 @@ module MinimalMatch
       "#{@comp_obj.to_s}"
     end
 
+    def to_obj
+      @comp_obj 
+    end
+
     def === val
       # enables classification if we are proxying a class object
       # doesn't work the other direction.  TFS
@@ -143,7 +147,7 @@ module MinimalMatch
     end
 
     def respond_to_missing? meth, *args
-      puts "respond to missing from abstract match proxy"
+      raise "How did you instantiate this object? This is an abstract."
     end
 
     def method_missing meth, *args
@@ -161,7 +165,5 @@ module MinimalMatch
     
     private :initialize
   end
-  
-  # so you can call it while you're debugging
 end 
 #  vim: set ts=2 sw=2 tw=0 :
