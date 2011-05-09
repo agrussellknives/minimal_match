@@ -120,6 +120,7 @@ module MinimalMatch
   # operators subclasses of counted repetition 
   # if you were feeling ambitious
   class CountedRepetition < Repetition
+
     attr_reader :range
    
     # yeah, it can actually be called either way 
@@ -148,7 +149,7 @@ module MinimalMatch
       run = []
       # rewrite the subexpression to a number of literals
       # followed by a number of zero or ones
-      subexpression = []
+      subexpression = [] 
 
       if @range.begin > 0
         @range.begin.times do
@@ -160,8 +161,11 @@ module MinimalMatch
       remaining.times do
         subexpression << greedy? ? ~(@comp_obj) : ~!(@comp_obj)
       end
-    
-      subexpression.compile(idx)
+     
+      subexpression.each_with_object [] do |mi,memo|
+        i = memo.length
+        memo.concat(mi._compile(i))
+      end
     end
 
     def to_s

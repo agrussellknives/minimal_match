@@ -55,7 +55,13 @@ module MinimalMatch
   end
 
   class MatchPattern
+    include MinimalMatch::ProxyOperators
+
+    UNANCHORED_BEGIN = MatchProxy.new(Anything).kleene.non_greedy
+    UNANCHORED_END = MatchProxy.new(Anything).kleene
+
     attr_reader :has_end, :has_begin, :has_epsilon, :length
+    attr_accessor :pattern 
     
     def initialize pattern
       if is_group? pattern
@@ -72,7 +78,7 @@ module MinimalMatch
             pattern = pattern[pattern.index(val).succ..-1]
             @has_begin = true
           when Repetition 
-            # zero width assertions will prevent a simple length check
+            # epsilon transitions will prevent a simple length check
             # optmization. it's probably possible to figure this
             # out, but we'll skip it for now
             @has_epsilon = true
@@ -80,38 +86,67 @@ module MinimalMatch
       end
      
       unless has_begin
-        pattern.unshift(MatchProxy.new(Anything).kleene.non_greedy)
+        # make sure not to double do it
+        pattern.unshift UNANCHORED_BEGIN unless pattern[0].eql? UNANCHORED_BEGIN
       end
 
       unless has_end
-        pattern.push(MatchProxy.new(Anything).kleene)
+        pattern.push UNANCHORED_END unless pattern[-1].eql? UNANCHORED_END
       end
 
       @pattern = pattern
     end
 
+    def length
+      if @has_epsilon
+        length == 0.0 / 0.0 #that's crazy
+      else
+        #counts the number of lliterals not enclosed in reptition operators
+        # on this level
+        compiled.select do |i,*a|
+          if (i == :split) .. (i == :noop) then #it's a flip flop! 
+            false
+          else
+            i == :lit
+          end
+        end.length
+      end
+    end
+
+    def to_s
+      @pattern.each_with_object("[") do |i,memo|
+        unless [UNANCHORED_END, UNANCHORED_BEGIN].include? i then
+          memo << i.to_s + ","
+        end
+      end.chop.concat "]"
+    end
+
+    def inspect
+      @pattern.reject do |i|
+        [UNANCHORED_BEGIN, UNANCHORED_END].include? i
+      end.inspect
+    end
+
     def compiled
-      @compiled ||= compile(pattern)
+      return @compiled if @compiled
+      compile
+      @compiled
     end
 
-    def recompile
-      @compiled = compile(pattern)
-    end
-
-    def compile pattern 
-      # directly compile raw match group
+    def compile
       is = []
-      pattern.each do |mi|
+      @pattern.each do |mi|
         i = is.length
         is.concat(MatchCompile.compile(i,mi))
       end
       is << [:match]
+      @compiled = is
+      true
     end
   end
 
   class MatchMachine
     include Debugging
-    extend MinimalMatch::ProxyOperators
     
     class << self
       def debug_class
@@ -124,13 +159,13 @@ module MinimalMatch
     def initialize(subject, pattern) 
       subject = subject.dup
       subject << Sentinel
-      pattern = pattern.respond_to?(:compiled) ? MinimalMatch::MatchPattern.new(pattern.dup) : pattern
+      pattern = pattern.respond_to?(:compiled) ? pattern : MinimalMatch::MatchPattern.new(pattern.dup) 
       @match_data = ArrayMatchData.new(subject, pattern)
-      
-      if not pattern.has_epsilon and subject.length < pattern.length
-         @always_false = true
-      end
 
+      if not pattern.has_epsilon and subject.length < pattern.length
+        @always_false = true
+      end
+      
       @program_enum = ReversibleEnumerator.new pattern.compiled
       @subject_enum = ReversibleEnumerator.new subject 
 
@@ -139,10 +174,9 @@ module MinimalMatch
     end
 
     def run
+      @pathology_count = 0 
       return false if @always_false
-
       debug.display_at 0,0
-      @pathology_count = 0
       @match_hash = {}
       @program_enum.next and @subject_enum.next
       res = catch :stop_now do
@@ -176,7 +210,7 @@ module MinimalMatch
              @match_hash[args] = {}
              @match_hash[args][:begin] = subject_enum.index
            else
-             @match_hash[args][:end] = subject_enum.index
+             @match_hash[args][:end] = subject_enum.index - 1 #reports always one past end
            end
            pattern_enum.next
            next
@@ -203,16 +237,13 @@ module MinimalMatch
         end
       end
     ensure
+      #debugging
       thread.close if thread
     end
 
-    def comp(subj_val,pattern_val) 
+    def comp(subj_val,pattern_val)
       op_sym = (subj_val.is_a? Array and pattern_val.is_a? Array) ? :=~ : :===
-      if op_sym == :===
-        r = subj_val.__send__ op_sym, pattern_val 
-      else
-        r = pattern_val.__send__ op_sym, subj_val 
-      end
+      r = subj_val.__send__ op_sym, pattern_val 
       r
     end
   end

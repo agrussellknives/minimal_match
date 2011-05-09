@@ -15,7 +15,10 @@ module MinimalMatch
   module Debugging
     class BlackHole < BasicObject #lo i am become blackhole, eater of messages
       include ::Singleton
+      include ::Kernel
       def method_missing m, *args
+        $stdout.puts m
+        yield *args if block_given?
         self
       end
     end

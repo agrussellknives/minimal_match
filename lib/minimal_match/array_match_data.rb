@@ -21,7 +21,7 @@ module MinimalMatch
 
     def inspect
       # recompile pattern to string leaving off the unanchored matches
-      p_string = @pattern.map(&:to_s)
+      p_string = @pattern.to_s
       "#<ArrayMatchData:0x#{'%x' % (self.__id__ << 1)} pattern: #{p_string} array: #{@array[0..-2]} begin: #{@first_index} end: #{@end_index}>"
     end
 

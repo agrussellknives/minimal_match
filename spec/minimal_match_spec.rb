@@ -175,19 +175,17 @@ describe "simple array matching" do
     ([1,2,3,[4],5].match([[4]]).begin).should == 3
   end
 
-  describe "keene star" do
-    it "matches greedily with keenestar" do
+  describe "kleene star" do
+    it "matches greedily with kleenestar" do
       # these two match using the same NFA 
       ([1,2,3,4,5] =~ [1,*m(Anything),5]).should == true
       ([1,2,3,4,5] =~ [1,*m(Anything)]).should == true
-
-      
-      ([1,2,3,4,5] =~ [1,*m(Anything),4]).should == true
       ([1,2,3,4,5] =~ [1,*m(Anything),6]).should == false
     end
 
     it "matches non-greedy" do
       ([1,2,3,4,5] =~ [1,*!m(Anything),5]).should == true
+    end
 
 
     it "matches recursively with splat" do
@@ -199,39 +197,10 @@ describe "simple array matching" do
 
   it "matches an specifc number of MinimalMatch.anythings" do
     
-    describe "the array flattener" do
-      it "flattens arrays when they are found" do
-        x = [1,MinimalMatch.anything * 3, 5]
-        x = MinimalMatch.flatten_match_array x
-        z = MinimalMatch.anything # save me some typing
-        x.should == [1, z, z, z, 5]
-      end
-
-      it "doesn't flatten recursively" do
-        x = [1,[2, MinimalMatch.anything * 3]]
-        x = MinimalMatch.flatten_match_array x
-        x.should == [1,[2, MinimalMatch.anything * 3]]
-      end
-
-      it "doesn't flatting arrays with anything other than specifics in them" do
-        x = [1,[2,3,[4,5,6]]]
-        x = MinimalMatch.flatten_match_array x
-        x.should == [1,[2,3,[4,5,6]]]
-      end
-
-      it "can flatten more than once" do
-        x = [1, MinimalMatch.anything * 2, 4, MinimalMatch.anything * 3]
-        x = MinimalMatch.flatten_match_array x
-        z = MinimalMatch.anything
-        x.should == [1, z, z, 4, z, z, z]
-      end
-    end
-
-    ([1,2,3,4,5] =~ [1, MinimalMatch.anything * 3, 5]).should == true
-    ([1,2,3,4,5] =~ [1, 3 * MinimalMatch.anything, 5]).should == true
+    ([1,2,3,4,5] =~ [1,m(Anything) * 3, 5]).should == true
     
     mult_test = lambda do |f|
-      ([1,2,3] =~ [1,MinimalMatch.anything * f])
+      ([1,2,3] =~ [1,m(Anything)*2]
     end
     lambda { mult_test.call('berney') }.should raise_error ArgumentError
     mult_test.call(2).should == true

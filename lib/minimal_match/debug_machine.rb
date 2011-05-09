@@ -25,6 +25,7 @@ module TermHelper
 
       
     COMMANDS = {
+    clear_screen: `tput clear`,
     save: `tput sc`,
     restore: `tput rc`,
     reset: `tput sgr0`,
@@ -206,10 +207,11 @@ module MinimalMatch
     attr_accessor:parent, :current_inst, :current_subj, :delay 
 
     def initialize(prog, subj, col = 1, zeroth = [nil,nil])
-      @delay = 0.25 
+      @delay = 0.20 
       @program = prog.to_a.dup #duplicate the subject and instruction set 
       @subj = subj.to_a.dup 
       @col = col
+      @sleep_tick = 0
       first_width = @subj.map(&:to_s).map(&:length).max + 10
       inst_width = @program.map(&:to_s).map(&:length).max + 10
       @width = [[first_width, inst_width].max + 2, 30].min # a little space
@@ -226,6 +228,7 @@ module MinimalMatch
       prog, subj, col, zeroth = [@program, @subj, @threads.count, @home]
       t = DebugMachine.new(prog,subj,col+1,zeroth)
       t.parent = self.parent || self
+      t.delay = self.delay
       # add to the root thread, not necessarily us
       t.parent.instance_exec(t) do |t|
         @threads << t
@@ -399,7 +402,7 @@ module MinimalMatch
           # draw a "collapsed thread" display
           collapsed = (@threads.count + 1) - room_for
           output :to_stdout do |str|
-            str << c.mrcup(-(@size[:rows]-1),@width-2)
+            str << c.mrcup(0,@width - collapsed)
             (@size[:rows]-1).times do
               str << smacs { "x" * collapsed }
               str << c.mrcup(1,@width-collapsed)
@@ -420,6 +423,7 @@ module MinimalMatch
 
     def display_at row,col
       output :to_stdout do |str|
+        str << c.clear_screen
         str << c.save
         str << c.moveto(row,col)
       end
@@ -436,7 +440,12 @@ module MinimalMatch
       end
       update subj, inst
       output c.restore
-      sleep @delay
+      if @delay == :forever
+        $stdin.gets
+      else
+        sleep @delay
+      end
+      @sleep_tick += 1
       true
     end
         
@@ -459,5 +468,3 @@ module MinimalMatch
   end
 end
 
-# enable debugging
-MinimalMatch::MatchMachine.debug= true

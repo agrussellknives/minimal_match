@@ -33,6 +33,10 @@ module MinimalMatch
       end
       s
     end
+
+    def capture 
+      MatchProxyGroup.new(@comp_obj)
+    end
     
     def inspect
       "<#{@comp_obj.inspect} : MatchProxy>"
