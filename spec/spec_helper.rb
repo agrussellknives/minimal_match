@@ -1,6 +1,8 @@
+require 'simplecov'
+SimpleCov.start 
+
 $LOAD_PATH.unshift(File.join(File.dirname(__FILE__), '..', 'lib'))
 $LOAD_PATH.unshift(File.dirname(__FILE__))
-require 'rspec'
 require 'minimal_match'
 
 
@@ -12,35 +14,7 @@ RSpec.configure do |config|
   
 end
 
-require 'simplecov'
-SimpleCov.start 
-
 
 # this is just data to test the search on.  sexps work great for this
 #
 # enable searches on arrays
-class Array
-  include MinimalSearchMixin
-end
-
-class Dummy
-  include Enumerable
-  def foo
-    puts "bar"
-  end
-
-  def bar
-    puts "foo"
-  end
-end
-
-class Dumber
-  include Enumerable
-  def foo
-    puts "bar"
-  end
-
-  def baz
-    puts "foobile"
-  end
-end

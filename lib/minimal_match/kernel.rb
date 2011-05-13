@@ -11,8 +11,8 @@ end
 
 module Kernel
   module_function 
-  def m *args
-    MinimalMatch.m *args
+  def m *args, &block
+    MinimalMatch.m *args, &block
   end
 
   def mg arg
@@ -20,15 +20,15 @@ module Kernel
   end
 
   def is_proxy? *args
-    MinimalMatch.is_proxy? *args
+    MinimalMatch::ProxyOperators.is_proxy? *args
   end
   
   def is_group? *args
-    MinimalMatch.is_group? *args
+    MinimalMatch::ProxyOperators.is_group? *args
   end
 
   def is_match_op? *args
-    MinimalMatch.is_match_op? *args
+    MinimalMatch::ProxyOperators.is_match_op? *args
   end
 
   Anything = MinimalMatch::Anything
