@@ -145,6 +145,7 @@ module MinimalMatch
     end
 
     def method_missing meth, *args
+      debugger
       raise "How did you instantiate this object? This is an abstract."
     end
 

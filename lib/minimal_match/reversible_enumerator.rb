@@ -15,12 +15,11 @@ class ReversibleEnumerator
     @index = -1 
     @obj = no_duplicate ? obj : obj.dup #if passed the duplicate param then dup the iterable
     @fiber = Fiber.new(&(method(:__block)))
-    @ref_hash = @obj.hash
-    @no_duplicate = no_duplicate
+    @ref_hash = @obj.hash if no_duplicate #we'll have to know if we duplicate this
   end
 
   def initialize_copy other 
-    if other.instance_eval { @no_duplicate }
+    if other.instance_eval { @ref_hash }
       @obj = other.obj
     else
       @obj = other.obj.dup
@@ -31,7 +30,7 @@ class ReversibleEnumerator
   end
 
   def to_s
-    "#<ReversibleEnumerator:#{'%x' % self.__id__ << 1}} #{@obj.to_s}"
+    "#<ReversibleEnumerator:#{'0x%x' % (self.__id__ << 1)} #{@obj.to_s}>"
   end
 
   def to_a
@@ -89,7 +88,7 @@ class ReversibleEnumerator
       raise NoMethodError, "ReversibleEnumerator does not respond to #{meth}"
     end
 
-    if @ref_hash != @obj.hash #our object has changed
+    if @ref_hash and @ref_hash != @obj.hash #our object has changed
       @ref_hash = @obj.hash
       if @last_obj
         @index = @obj.index @last_obj

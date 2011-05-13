@@ -91,13 +91,6 @@ module MinimalMatch
     end
   end
   module_function :m
-
-  # so you can group single width matches
-  def mg(arg)
-    MinimalMatch::MatchProxyGroup.new(*arg)
-  end
-  module_function :mg
-
 end
 
 require_relative 'minimal_match/minimal_match'

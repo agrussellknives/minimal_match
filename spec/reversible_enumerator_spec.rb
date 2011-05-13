@@ -54,11 +54,10 @@ describe "it's a reversible enumerator" do
     en = ReversibleEnumerator.new @array
     en.index = -3
     lambda { en.current }.should raise_error StopIteration
-    en.index = 1 
-    en.next.should == 3 
+    en.next.should == 1
     en.rewind
-    en.prev
-    lambda { en.index.should == -1 }.should raise_error StopIteration
+    en.prev #could actually be set to -2
+    lambda { en.instance_eval { @index }.should == -1 }.should raise_error StopIteration
   end
 
   it "raises nomethod" do
@@ -66,21 +65,6 @@ describe "it's a reversible enumerator" do
     lambda { en.igglybooy }.should raise_error NoMethodError
   end
 
-  it "will do what you tell it, even if it know better" do
-    en = ReversibleEnumerator.new @array
-    en.next
-    en.current.should == 1 
-    t = Thread.new do
-      begin 
-        en.next
-      rescue FiberError
-        en.grab
-        retry
-      end
-      en.next.should == 2 
-    end
-    t.join
-  end
 
   it "rewinds" do
     en = ReversibleEnumerator.new @array
@@ -265,6 +249,18 @@ describe "it's a reversible enumerator" do
     lambda { en.prev }.should raise_error StopIteration
   end
 
+  it "converts back to an array" do
+    arr = @array.dup
+    en = ReversibleEnumerator.new arr
+    en.to_a.should == arr
+  end
+
+  it "inspect works" do
+    arr = @array.dup
+    en = ReversibleEnumerator.new arr
+    en.inspect.should == "#<ReversibleEnumerator:0x660b34 [1, 2, 3, 4, 5]>"
+  end
+
   it "won't let you touch it from another thread" do
     en2 = nil 
     s = Thread.new do
@@ -284,4 +280,21 @@ describe "it's a reversible enumerator" do
     s.join
     lambda { en3.index= 3}.should raise_error FiberError
   end
+  
+  it "can be grabbed from another thread, despite it's best efforts" do
+    en = ReversibleEnumerator.new @array
+    en.next
+    en.current.should == 1 
+    t = Thread.new do
+      begin 
+        en.next.should == 2
+      rescue FiberError
+        en.should_receive(:warn).with "Point of ReversibleEnumerator subverted!"
+        en.grab
+        retry
+      end
+    end
+    t.join
+  end
+
 end
