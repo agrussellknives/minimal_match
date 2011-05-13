@@ -1,6 +1,4 @@
-require 'spec_helper'
-
-require 'minimal_match/reversible_enumerator'
+require_relative '../lib/minimal_match/reversible_enumerator'
 
 describe "it's a reversible enumerator" do
   before :all do
@@ -48,38 +46,6 @@ describe "it's a reversible enumerator" do
     en.index = 3
     en.current.should == 4
     en.next.should == 5
-  end
-
-  it "can assign an out of range index" do
-    en = ReversibleEnumerator.new @array
-    en.index = -3
-    lambda { en.current }.should raise_error StopIteration
-    en.index = 1 
-    en.next.should == 3 
-    en.rewind
-    en.prev
-    lambda { en.index.should == -1 }.should raise_error StopIteration
-  end
-
-  it "raises nomethod" do
-    en = ReversibleEnumerator.new @array
-    lambda { en.igglybooy }.should raise_error NoMethodError
-  end
-
-  it "will do what you tell it, even if it know better" do
-    en = ReversibleEnumerator.new @array
-    en.next
-    en.current.should == 1 
-    t = Thread.new do
-      begin 
-        en.next
-      rescue FiberError
-        en.grab
-        retry
-      end
-      en.next.should == 2 
-    end
-    t.join
   end
 
   it "rewinds" do

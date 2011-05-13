@@ -9,15 +9,42 @@ require 'singleton'
 
 module MinimalMatch
 
-  def last_match
-    @last_match || nil
+  class MarkerObject < MinimalMatchObject
+    # abstract position marker
+    include ::Singleton
+    def ===
+      false
+    end
+
+    def to_s
+      #memoize the string value after it's calculated
+      @s_val ||= lambda { self.class.to_s.gsub("Class",'') }.call
+    end
+
+    def inspect
+      self.class
+    end
+
+    private :initialize
   end
-  module_function :last_match
+
+  class EndClass < MarkerObject; end
+  class BeginClass < MarkerObject; end
+
+  # you can't access the array "post" from ruby code
+  # so you need this to know when you're at the end of
+  # the array
+  class SentinelClass < MarkerObject; end
+ 
+  Anything = MinimalMatch::AnythingClass.instance
+  End = MinimalMatch::EndClass.instance
+  Begin = MinimalMatch::BeginClass.instance
+  Sentinel = MinimalMatch::SentinelClass.instance
 
   def noop; NoOp.instance(); end
     
   module ArrayMethods
-    def match pattern 
+    def match match_array
       MatchMachine.new(self,pattern).run
     end
 
@@ -33,26 +60,22 @@ module MinimalMatch
     UNANCHORED_BEGIN = MatchProxy.new(Anything).kleene.non_greedy
     UNANCHORED_END = MatchProxy.new(Anything).kleene
 
-    attr_reader :has_end, :has_begin, :has_epsilon
+    attr_reader :has_end, :has_begin, :has_epsilon, :length
     attr_accessor :pattern 
-
-    #cause I'm lazy
-    alias :has_end? :has_end
-    alias :has_begin? :has_begin
-    alias :has_epsilon? :has_epsilon
     
     def initialize pattern
-      if is_group? pattern or is_proxy? pattern or is_match_op? pattern
+      if is_group? pattern
         pattern = [pattern] # so we don't capture the leading and trailing kleens
       end
-      @has_end = @has_begin = @has_epsilon = false
-      pattern.find_all { |i| is_match_op? i }.each do |val| 
+
+      @has_end, @has_begin, @has_epsilon = false
+      pattern.find_all { |i| i.kind_of? MarkerObject }.each do |val| 
         case val
-          when EndClass
-            pattern = pattern[0 .. pattern.index(val)]
+          when End
+            pattern = pattern[0..pattern.index(val).prev]
             @has_end = true
-          when BeginClass
-            pattern = pattern[pattern.index(val).succ .. -1]
+          when Begin
+            pattern = pattern[pattern.index(val).succ..-1]
             @has_begin = true
           when Repetition 
             # epsilon transitions will prevent a simple length check
@@ -76,7 +99,7 @@ module MinimalMatch
 
     def length
       if @has_epsilon
-        return 0.0 / 0.0 #that's crazy
+        length == 0.0 / 0.0 #that's crazy
       else
         #counts the number of lliterals not enclosed in reptition operators
         # on this level
@@ -111,12 +134,11 @@ module MinimalMatch
     end
 
     def compile
-      is = [[:hold, 0]]
+      is = []
       @pattern.each do |mi|
         i = is.length
         is.concat(MatchCompile.compile(i,mi))
       end
-      is << [:save, 0]
       is << [:match]
       @compiled = is
       true
@@ -137,7 +159,7 @@ module MinimalMatch
     def initialize(subject, pattern) 
       subject = subject.dup
       subject << Sentinel
-      pattern = pattern.respond_to?(:compiled) ? pattern.dup : MinimalMatch::MatchPattern.new(pattern.dup) 
+      pattern = pattern.respond_to?(:compiled) ? pattern : MinimalMatch::MatchPattern.new(pattern.dup) 
       @match_data = ArrayMatchData.new(subject, pattern)
 
       if not pattern.has_epsilon and subject.length < pattern.length
@@ -160,12 +182,7 @@ module MinimalMatch
       res = catch :stop_now do
         process @program_enum, @subject_enum
       end
-      @match_hash.each do |key,match|
-        @match_data.instance_exec(key,match) do |k,m|
-          @captures[k] = m
-        end
-      end
-      MinimalMatch.__send__ :instance_variable_set, :@last_match, @match_data
+      puts @match_hash
       res ? @match_data : false
     end
 
@@ -183,23 +200,23 @@ module MinimalMatch
 
         case op 
          when :lit # this is the only code that actually does a comparison
-           return false unless r = comp(subject_enum.current, args)
-           @match_data.sub_match[subject_enum.index] = r if r.is_a? ArrayMatchData
-           pattern_enum.next and (subject_enum.next unless subject_enum.end?)
+           return false unless comp(args, subject_enum.current)
+           pattern_enum.next and subject_enum.next #advance both
          when :noop
            pattern_enum.next #advance enumerator, but not match
            next
-         when :hold
-           @match_hash[args] = { :begin => subject_enum.index }
-           pattern_enum.next
-           next
          when :save
-           @match_hash[args][:end] = subject_enum.index - 1 #reports always one past end
+           unless @match_hash.has_key? *args
+             @match_hash[args] = {}
+             @match_hash[args][:begin] = subject_enum.index
+           else
+             @match_hash[args][:end] = subject_enum.index - 1 #reports always one past end
+           end
            pattern_enum.next
            next
          # not currently in use
          when :peek
-           return false unless comp(subject_enum.peek, args)
+           return false unless comp(args, subject_enum.peek)
            pattern_enum.next and subject_enum.next #advance both
          when :match
            last_idx = subject_enum.index
@@ -225,15 +242,11 @@ module MinimalMatch
     end
 
     def comp(subj_val,pattern_val)
-      op_sym = (subj_val.is_a? Array and pattern_val.is_a? Array) ? :match : :===
-      if op_sym == :===
-        r = pattern_val.__send__ op_sym, subj_val  #because === isn't commutative
-      else
-        r = subj_val.__send__ op_sym, pattern_val
-      end
+      op_sym = (subj_val.is_a? Array and pattern_val.is_a? Array) ? :=~ : :===
+      r = subj_val.__send__ op_sym, pattern_val 
+      r
     end
   end
 end
-
 
 

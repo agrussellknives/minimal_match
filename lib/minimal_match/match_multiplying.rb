@@ -1,4 +1,5 @@
 require 'singleton'
+require 'sender'
 
 module MinimalMatch
 
@@ -158,12 +159,12 @@ module MinimalMatch
 
       remaining = @range.end - @range.begin
       remaining.times do
-        subexpression << (greedy? ? ~(@comp_obj) : ~!(@comp_obj))
+        subexpression << greedy? ? ~(@comp_obj) : ~!(@comp_obj)
       end
      
       subexpression.each_with_object [] do |mi,memo|
         i = memo.length
-        memo.concat(mi._compile(i+idx))
+        memo.concat(mi._compile(i))
       end
     end
 

@@ -34,14 +34,9 @@ module MinimalMatch
       s
     end
 
-    def bind name = nil
-      pg = MatchProxyGroup.new(@comp_obj)
-      if name
-        pg.bind(name)
-      end
-      pg
+    def capture 
+      MatchProxyGroup.new(@comp_obj)
     end
-    alias :capture :bind
     
     def inspect
       "<#{@comp_obj.inspect} : MatchProxy>"
@@ -108,7 +103,8 @@ module MinimalMatch
     end
 
     def _compile bind_index = nil
-      run = [[:hold, @bind_name || bind_index ]] # replace this with bind_index
+      puts "compile with #{bind_index} from #{__sender__}::#{__caller__}"
+      run = [[:save, @bind_name || bind_index ]] # replace this with bind_index
       @comp_obj.each_with_index.each_with_object(run) do |(mi, idx), memo|
         memo << mi.compile(bind_index+idx+1)
       end

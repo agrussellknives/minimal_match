@@ -12,7 +12,6 @@ module MinimalMatch
    jump: 1,
    noop: 0,
    peek: 1,
-   hold: 1,
    save: 1,
    match: 0
   }
@@ -24,7 +23,11 @@ module MinimalMatch
         r = obj._compile(at_index || 0)
       rescue NoMethodError => e
         raise e unless e.name == :_compile #pass any other exception
-        r = [:lit, obj]
+        r = if is_proxy? obj
+          [:lit, obj.comp_obj] # i don't think this is reachable
+        else 
+          [:lit, obj]
+        end
       end
       normalize_compile r
     end
@@ -78,7 +81,6 @@ module MinimalMatch
         superclass = superclass.superclass
       end
       @ancestry.uniq!
-      @is_match_op = true
     end
     private :initialize
 
@@ -101,7 +103,9 @@ module MinimalMatch
 
     # these are not just aliased, because we undef
     # to_s in the proxy classes, but not inspect
-    def to_s; end
+    def to_s
+      @klass.to_s
+    end
 
     def inspect
       @klass.to_s

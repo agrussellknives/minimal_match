@@ -1,4 +1,5 @@
 require 'tempfile'
+require 'pry'
 
 # it is so tempting to make this into a whole little gem
 module TermHelper

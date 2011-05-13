@@ -1,14 +1,10 @@
 module MinimalMatch
   class ArrayMatchData
-    attr_accessor :sub_match
-
     def initialize(array, pattern)
       @first_index = nil 
       @end_index = nil 
-      @array = array[0..-2].freeze #drop the sentinel
-      @pattern = pattern.dup.freeze
-      @captures = {}
-      @sub_match = {}
+      @array = array
+      @pattern = pattern
     end
 
     def ==(mtch2)
@@ -16,39 +12,29 @@ module MinimalMatch
     end
 
     def begin
-      return @begin if @begin
-      beg = 1.0/0
-      @captures.each do |k,v|
-        beg = v[:begin] < beg ? v[:begin] : beg
-      end
-      @begin = beg
+      @first_index
     end
 
     def end
-      return @end if @end
-      endd = 0
-      @captures.each do |k,v|
-        endd = v[:end] > endd ? v[:end] : endd
-      end
-      @end = endd
+      @end_index
     end
 
     def inspect
       # recompile pattern to string leaving off the unanchored matches
       p_string = @pattern.to_s
-      "#<ArrayMatchData:0x#{'%x' % (self.__id__ << 1)} pattern: #{p_string} array: #{@array} begin: #{self.begin} end: #{self.end}>"
+      "#<ArrayMatchData:0x#{'%x' % (self.__id__ << 1)} pattern: #{p_string} array: #{@array[0..-2]} begin: #{@first_index} end: #{@end_index}>"
     end
 
     def length
-      (@end - @begin) + 1 # inclusive
+      (@end_index - @first_index) + 1 # inclusive
     end
 
     def post_match
-      @array[@end+1..-1]
+      @array[@end_index..-1]
     end
 
     def pre_match
-      @array[0..@begin-1]
+      @array[0..@first_match]
     end
 
     def pattern
@@ -56,46 +42,40 @@ module MinimalMatch
     end
 
     def array
-      @array
+      @array.dup.freeze
     end
 
-    def captures
-      @captures.each_with_object [] do |k,v,memo|
-        if not k.is_a? Fixnum
-          memo << [k, [@array[v[:begin] .. v[:end]]]]
-        else
-          memo << @array[v[:begin] .. v[:end]]
-        end
+    # deals with multiple matches, which we don't
+    # support... yet
+    [:[], :captures, :names, :offset, :to_a, :to_s,
+     :values_at].each do |m|
+      define_method m do |*args|
+        raise NotImplementError
       end
     end
 
-    def names
-      @captures.keys.select { |i| not i.is_a? Fixnum }
-    end
-    
+    # things that maybe we implement later
+    #- (Array) captures
+    #Returns the array of captures; equivalent to mtch.to_a.
+
+    #- (Array) names
+    #Returns a list of names of captures as an array of strings.
+
     #- (Array) offset(n)
     #Returns a two-element array containing the beginning and ending offsets of the nth match.
-    def offset n
-      b,e = @captures[n][:begin], @captures[n][:end]
-      [b,e]
-    end
 
-    def size
-      @captures.size
-    end
+    #- (Regexp) regexp
+    #Returns the regexp.
+    #- (Object) size
+    #Returns the number of elements in the match array.
 
     #- (Array) to_a
     #Returns the array of matches.
-    def to_a
-      @captures.collect do |k,v|
-        @array[v[:begin] .. v[:end]]
-      end
-    end
 
     #- (String) to_s
     #Returns the entire matched string.
-    def values_at(*args)
-      self.to_a.values_at(*args)
-    end
+
+    #- (Array) values_at([index])
+    #Uses each index to access the matching values, returning an array of the corresponding matches.
   end
 end
