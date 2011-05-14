@@ -3,6 +3,7 @@ require 'lib/minimal_match/version'
 
 require 'rubygems'
 require 'bundler'
+
 begin
   Bundler.setup(:default, :development)
 rescue Bundler::BundlerError => e
@@ -12,7 +13,6 @@ rescue Bundler::BundlerError => e
 end
 
 require 'rake'
-
 require 'jeweler'
 
 Jeweler::Tasks.new do |gem|
@@ -35,14 +35,36 @@ Jeweler::RubygemsDotOrgTasks.new
 
 require 'rspec/core'
 require 'rspec/core/rake_task'
+
 RSpec::Core::RakeTask.new(:spec) do |spec|
   spec.pattern = FileList['spec/**/*_spec.rb']
 end
 
-RSpec::Core::RakeTask.new(:simplecov) do |spec|
-  spec.pattern = 'spec/**/*_spec.rb'
-  spec.rcov = true
+RSpec::Core::RakeTask.new(:spec_with_report) do |spec|
+  spec.fail_on_error = false
+  spec.skip_bundler = true
+  spec.pattern = FileList['spec/**/*_spec.rb']
+  spec.rspec_opts = "--format html --out report/test_report.html"
 end
+
+task :report do
+  Dir.mkdir "report" unless File.exists? "report"
+  Dir.mkdir "report/profile" unless File.exists? "report/profile"
+  File.open "report/index.html","w" do |f|
+    f.write <<-HTML
+      <html>
+        <body>
+          <h1> Status Report </h1>
+          <a href="coverage/index.html"> Coverage </a>
+          <a href="profile/profile.html"> Speed Profile </a>
+          <a href="test_report.html"> Test Report </a>
+        </body>
+      </html>
+    HTML
+  end
+
+  Rake::Task[:spec_with_report].invoke
+end 
 
 task :default => :spec
 

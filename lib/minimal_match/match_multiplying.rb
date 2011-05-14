@@ -28,12 +28,6 @@ module MinimalMatch
     def !
       if greedy? then non_greedy else greedy end
     end
-
-    def method_missing meth, *args
-      # for some reason __sender__ chokes this
-      puts "sent #{__method__} with #{args.to_s} from #{__caller__} from group underproxy"
-      @comp_obj.__send__ meth, *args
-    end
   end
 
   # create the reptition operators
@@ -160,7 +154,7 @@ module MinimalMatch
       remaining.times do
         subexpression << (greedy? ? ~(@comp_obj) : ~!(@comp_obj))
       end
-     
+
       subexpression.each_with_object [] do |mi,memo|
         i = memo.length
         memo.concat(mi._compile(i+idx))
@@ -186,8 +180,9 @@ module MinimalMatch
     end
   end
 
-  class NoOp < MinimalMatchObject; end
-  NoOp.__send__ :include, Singleton
+  class NoOp < MinimalMatchObject
+    include ::Singleton 
+  end
 
   module Alternate
     def | arg
@@ -325,8 +320,10 @@ module MinimalMatch
 
 
 # include these modules in the abstract matchproxy
-  AbstractMatchProxy.__send__ :include, ::MinimalMatch::MatchMultiplying
-  AbstractMatchProxy.__send__ :include, ::MinimalMatch::Alternate
+  class AbstractMatchProxy < MinimalMatchObject
+    include ::MinimalMatch::MatchMultiplying
+    include ::MinimalMatch::Alternate
+  end
 end
 
 # mix these modules into the match proxy

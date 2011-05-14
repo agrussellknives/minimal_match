@@ -121,6 +121,10 @@ module MinimalMatch
       @compiled = is
       true
     end
+
+    def pp
+      compiled.each_with_index { |e,i| puts "#{'%03d' % i} : #{e}" } 
+    end
   end
 
   class MatchMachine
@@ -156,6 +160,7 @@ module MinimalMatch
       return false if @always_false
       debug.display_at 0,0
       @match_hash = {}
+      @match_hash_index = -1 
       @program_enum.next and @subject_enum.next
       res = catch :stop_now do
         process @program_enum, @subject_enum
@@ -165,6 +170,8 @@ module MinimalMatch
           @captures[k] = m
         end
       end
+      
+      #because I don't want people setting this without REALLY TRYING HARD 
       MinimalMatch.__send__ :instance_variable_set, :@last_match, @match_data
       res ? @match_data : false
     end
@@ -179,7 +186,7 @@ module MinimalMatch
         
         # debugging output
         debug.thread(thread).update_inplace subject_enum.index, pattern_enum.index
-        debug.puts_inplace "Pathology = #{@pathology_count} Idx = #{[subject_enum.index, pattern_enum.index]}"
+        debug.puts_inplace "Pathology = #{@pathology_count} Idx = #{[subject_enum.index, pattern_enum.index]} MHI = #{@match_hash_index}"
 
         case op 
          when :lit # this is the only code that actually does a comparison
@@ -190,11 +197,14 @@ module MinimalMatch
            pattern_enum.next #advance enumerator, but not match
            next
          when :hold
-           @match_hash[args] = { :begin => subject_enum.index }
+           @match_hash_index += 1
+           mhi = args.is_a?(Symbol) ? args : @match_hash_index #suport named captures
+           @match_hash[mhi] = { :begin => subject_enum.index }
            pattern_enum.next
            next
          when :save
-           @match_hash[args][:end] = subject_enum.index - 1 #reports always one past end
+           @match_hash[@match_hash_index][:end] = subject_enum.index - 1 #reports always one past end
+           @match_hash_index -= 1
            pattern_enum.next
            next
          # not currently in use

@@ -60,8 +60,8 @@ module MinimalMatch
     end
 
     def captures
-      @captures.each_with_object [] do |k,v,memo|
-        if not k.is_a? Fixnum
+      @captures.each_with_object [] do |(k,v), memo|
+        if not k.is_a? Integer 
           memo << [k, [@array[v[:begin] .. v[:end]]]]
         else
           memo << @array[v[:begin] .. v[:end]]
@@ -70,7 +70,7 @@ module MinimalMatch
     end
 
     def names
-      @captures.keys.select { |i| not i.is_a? Fixnum }
+      @captures.keys.select { |i| not i.is_a? Integer}
     end
     
     #- (Array) offset(n)
