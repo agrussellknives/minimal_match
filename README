@@ -1,0 +1,96 @@
+= minimal_match
+
+NFA / Regex like pattern matching for ruby arrays.
+
+= Why?
+
+Because it's a pain in the ass to have to create quasi-NFA programs everytime you want to search through an array.  Also, if you are search deeply nested arrays, or many arrays at once, you have to write code which matches the patter.  Some patterns are actually pretty difficult to write cleanly (if there is a 3 following the first index at which you find a 2, anywhere in the array.)  
+
+The minimal_match library makes it easier to search arrays. In addition, the library can be used for all sorts of Array magic.  (Multiple dispatch, sexp processing etc.)
+
+= What?
+
+The basic princple of MinimalMatch is the same as a regex, a specially constructed object is compiled into a short program which is then used to match against an array.  If the program makes it into a "match" state before the subject is exhausted, the pattern matches.  Just as Regexs are constructed of strings, MinimalMatch patterns are constructed as Array objects. The implementation is inspired by the RE2 library.  For those of you who are interested in such arcana - it is a simple recursive DFA. It does not currently support backtracking.  The following regex like operations are supported.
+
+  * Kleene Star (* operator) ( spelled '*')
+  * Plus (one or more) spelled '+'
+  * Question (zero or one) spelld '~'
+  * Alternation spelled '|'
+  * Character Class spelled '[]'
+  * Capturing Groups / Named Captures spelled 'm(A,B)'
+  * Numbered Repetions spelled '[(Range)]' or '* Integer'
+  * Nongreedy repetition operators spelled with a preceding '!'
+
+Each pattern is an array that consists of a sequence of MatchProxy objects which implement these operators. A MatchProxy object can be created by using the m() constructor or by sending the #to_m message to any descendant of object.  
+
+Beyond the expression operators, a MatchProxy passes any messages onto the underlying objects. This enables you to do thinks like Proxy a Singleton Class, or to modify the underlying object in place.  (You will need to recompile the pattern if you do that.) In order to "get at" the underlying object, you can use the #comp_obj or #c method.  
+
+For instance, in order to match the Fixnum 2 somewhere in the array, you simple use
+    
+    m(2)
+
+A proxy object that passes messages onto it's underlying object returns a different MatchProxy object over the results.
+    
+    # m(2) + 2
+    => 4 : MatchProxy 
+
+The exception to this is NilClass, FalseClass, and TrueClass.  If returned as a result of an operation on a proxy object, they are not immediately proxies, but returned as is.  (You can still proxy these objects directly should you want to find for instance a run of 3 to 5 NilClass objects in an array)
+
+MatchProxy objects implementthe #to_s method which returns the string (or an equivalent) used to create them.  In this way a MatchProxy can be roundtripped to a string and back using eval.
+
+MinimalMatch maintains it's own heirarchy of objects of which MatchProxy is one. These objects can be identified by the Kernel method #is_proxy? or #is_match_op? these methods will return nil or true.
+
+== Let's Make Some Matches ==
+
+The simplest possible case is just an extremely expensive equivalency test. The Kernel mixin overrides #=~ on Array to provide Regex like semantics. 
+
+    # This is stupid. Don't do this 
+    [1,2,3] =~ [1,2,3]
+    #=> true
+
+    # This is less stupid.
+    [1,2,3,4,5,6,7] =~ [5,6]
+    #=> true
+
+    # This is a somewhat good use for this.
+    [1,2,3,4,5,6,7] =~ [1,(m(Anything)*5).bind,7]
+    #=> true
+
+The matches area available in the MinimalMatch.last_match function. This returns an "ArrayMatchData" object which has identical semantics to a RegexMatchData object. To return the ArrayMatchData object directly use the "#match" method.
+
+In fact, anything which responds rationally to #=== is a canidate for MatchProxy wrapping.  Classes, Procs (which can be created by passing a block to the #m method) and basically any other object can be wrapped in a MatchProxy and treated as an element of the MatchPattern.
+
+=== Them what proxies, them what don't ===
+
+In order to provide object like semantics for individual match pattern elements MinimalMatch implements two kinds of base objects.  You've already met MatchProxy, now it's time to meet his sibling - the MinimalMatchObject.  A MinimalMatchObject is the result when the MatchProxy responds to pattern operators, or for certain special "literals." For example:
+    
+    #Create a MinimalMatchObject
+    m(2)[2..4]
+    #=> CountedRepetition 2 to 4 of 2 : MatchProxy
+
+MinimalMatchObjects are not MatchProxies, so if you want to capture a repetition group or alternate one, it must also be wrapped in a MatchProxy.
+
+=== Budee,budee,budee ===
+
+That's the basics of MinimalMatch.  Further information is available in the RDoc
+which provide more examples.
+
+=== A Parting Shot ===
+
+Because operators are implemented as objects, it is fairly easy to add operators to the basic set provided.  The basic principle is to implement a #_compile method on your MinimalMatchObject subclass.  The compile method should return an array of "bytecodes" that the MatchMachine can execute.  A list of bytecodes can be found in the MatchCompile module.  
+
+== Contributing to minimal_match
+ 
+* Check out the latest master to make sure the feature hasn't been implemented or the bug hasn't been fixed yet
+* Check out the issue tracker to make sure someone already hasn't requested it and/or contributed it
+* Fork the project
+* Start a feature/bugfix branch
+* Commit and push until you are happy with your contribution
+* Make sure to add tests for it. This is important so I don't break it in a future version unintentionally.
+* Please try not to mess with the Rakefile, version, or history. If you want to have your own version, or is otherwise necessary, that is fine, but please isolate to its own commit so I can cherry-pick around it.
+
+== Copyright
+
+Copyright (c) 2011 A.G. Russel Knives. See LICENSE.txt for
+further details.
+
