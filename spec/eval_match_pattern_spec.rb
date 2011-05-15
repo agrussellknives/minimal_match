@@ -4,6 +4,14 @@ require 'spec_helper'
 require 'minimal_match'
 require 'minimal_match/kernel'
 
+def pc thing
+  thing.each_with_index.inject "" do |(e,i), memo|
+    memo << "#{'%0d' % i} : e\n"
+    memo
+  end
+  memo
+end
+
 describe "expression evaluation" do
 
   it "compile simple match expression" do
@@ -54,9 +62,9 @@ describe "expression evaluation" do
     end
 
     it "should do counted ranges" do
-      me = m(1)[1..5]
-      me.to_s.should == 'm(1)[1..5]'
-      eval(me.to_s).inspect.should == m(1)[1..5].inspect
+      me = m(1)[1..3]
+      me.to_s.should == 'm(1)[1..3]'
+      eval(me.to_s).inspect.should == m(1)[1..3].inspect
       me.compile.should == [[:lit, 1], [:split, 3, 4], [:lit, 1], [:noop], [:split, 6, 7], [:lit, 1], [:noop], [:split, 9, 10], [:lit, 1], [:noop], [:split, 12, 13], [:lit, 1], [:noop]] 
     end
 

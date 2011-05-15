@@ -149,15 +149,21 @@ module MinimalMatch
           subexpression << @comp_obj #comp_obj is always a proxy
         end
       end
-
+      
       remaining = @range.end - @range.begin
       remaining.times do
-        subexpression << (greedy? ? ~(@comp_obj) : ~!(@comp_obj))
+        subexpression << if greedy? then
+          ~(@comp_obj)
+        else
+          ~!(@comp_obj)
+        end
       end
 
       subexpression.each_with_object [] do |mi,memo|
-        i = memo.length
-        memo.concat(mi._compile(i+idx))
+        i = memo.length + idx
+        # this is sort of recursive, but it
+        # normalizes the bytecode this way
+        memo.concat(MatchCompile.compile(i,mi))
       end
     end
 
@@ -282,7 +288,7 @@ module MinimalMatch
   end
 
   def !
-    if @non_greedy then greedy else non_greedy end
+    non_greedy
   end
 
   def +@

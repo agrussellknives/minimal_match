@@ -129,12 +129,17 @@ module MinimalMatch
 
   class MatchMachine
     include Debugging
+
+    class PathologicalPatternError < StandardError; end
     
     class << self
+      attr_accessor :max_pathology
       def debug_class
         MinimalMatch::DebugMachine
       end
     end
+
+    MatchMachine.max_pathology = 1000
 
     attr_accessor :match_data
 
@@ -178,7 +183,10 @@ module MinimalMatch
 
     def process pattern_enum, subject_enum, thread = nil
       @pathology_count += 1
-      
+      if @pathology_count > self.class.max_pathology
+        raise PathologicalPatternError, "More than #{self.class.max_pathology} backtracking recursions."
+      end
+
       loop do
         op, *args = pattern_enum.current
         #smells funny, but i thinkg this is actually correct

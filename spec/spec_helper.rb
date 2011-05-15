@@ -1,30 +1,33 @@
 require 'simplecov'
-require 'ruby-prof'
-require 'ruby-debug'
 
-SimpleCov.start do
-  add_filter "spec.rb"
-  coverage_dir "report/coverage"
-end
+if ENV["REPORT"] == 1 then
+  require 'ruby-prof'
+  require 'ruby-debug'
 
-RSpec.configure do |config|
-  config.before :suite do |example|
-    STDOUT << '|'
-    RubyProf.start
+  SimpleCov.start do
+    add_filter "spec.rb"
+    coverage_dir "report/coverage"
   end
 
-  config.around :each do |example|
-    STDOUT << '.'
-    RubyProf.resume do
-      example.run
+  RSpec.configure do |config|
+    config.before :suite do |example|
+      STDOUT << '|'
+      RubyProf.start
     end
-  end
-  
-  config.after :suite do
-    result = RubyProf.stop
-    result.eliminate_methods!([/RSpec::Matchers#.*?/])
-    printer = RubyProf::MultiPrinter.new(result)
-    printer.print(:path => 'report/profile', :profile => "profile")
+
+    config.around :each do |example|
+      STDOUT << '.'
+      RubyProf.resume do
+        example.run
+      end
+    end
+    
+    config.after :suite do
+      result = RubyProf.stop
+      result.eliminate_methods!([/RSpec::Matchers#.*?/])
+      printer = RubyProf::MultiPrinter.new(result)
+      printer.print(:path => 'report/profile', :profile => "profile")
+    end
   end
 end
 

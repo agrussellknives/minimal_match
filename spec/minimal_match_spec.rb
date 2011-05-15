@@ -21,9 +21,20 @@ describe "simple array matching" do
       pattern.has_epsilon?.should == true
       pattern.length.nan?.should == true #infinity!
       ([2,2,2,2] =~ pattern).should == true
-      ([2,2,2,2,2] =~ pattern).should == false
+      ([2,2,2,2,2] =~ pattern).should == true 
       ([2] =~ pattern).should == false
       ([2,2,2] =~ pattern).should == true
+    end
+
+    it "captures groups properly" do
+      pattern = [m(m(2)[2..4]).bind]
+      ([2,2,2,2] =~ pattern).should == true
+      MinimalMatch.last_match.captures.should == [[2,2,2,2],[2,2,2,2]]
+      
+      #non greedy
+      pattern = [m(!m(2)[2..4]).bind]
+      ([2,2,2,2] =~ pattern).should == true
+      MinimalMatch.last_match.captures.should == [[2,2,2,2],[2,2]]
     end
   end
 

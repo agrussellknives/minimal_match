@@ -62,8 +62,9 @@ task :report do
       </html>
     HTML
   end
-
+  ENV["REPORT"] = "1" 
   Rake::Task[:spec_with_report].invoke
+  ENV["REPORT"] = ""
 end 
 
 task :default => :spec
