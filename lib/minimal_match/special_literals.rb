@@ -75,11 +75,6 @@ module MinimalMatch
       false
     end
 
-    def to_s
-      #memoize the string value after it's calculated
-      @s_val ||= lambda { self.class.to_s.gsub("Class",'') }.call
-    end
-
     def inspect
       self.class
     end
@@ -91,8 +86,15 @@ module MinimalMatch
     def _compile idx
       [:lit, Sentinel]
     end
+    def to_s
+      "End"
+    end
   end
-  class BeginClass < MarkerObject; end
+  class BeginClass < MarkerObject
+    def to_s
+      "Begin"
+    end
+  end
 
   # you can't access the array "post" from ruby code
   # so you need this to know when you're at the end of

@@ -74,6 +74,29 @@ module MinimalMatch
       @pattern = pattern
     end
 
+    #Access the pattern you passed in, useful for changing a pattern dynamically.
+    #To change the pattern as it actually exists (including the implicit Kleene star)
+    #use the #pattern method, and change that. (For instance, to change it to an
+    #anchored from unanchored match)
+    def [] arg
+      clean_pattern = @pattern.reject do |i|
+        [UNANCHORED_BEGIN, UNANCHORED_END].include? i
+      end
+      clean_pattern[arg]
+    end
+    
+    # Change the pattern using the indexes that were passed in.  If it's out of range
+    # for that, raises IndexError.
+    def []= idx, arg 
+      if idx > @pattern.length - 2
+        raise IndexError, "Index out of range.  Did you want #{self}.pattern[#{idx}] = #{arg}?"
+      end
+      @pattern[idx+1] = arg
+    end
+
+    # The minimum length of an array necessary to match the pattern.
+    # Currently, this just punts if there are any epsilon transitions in the 
+    # pattern itself, and returns NaN
     def length
       if @has_epsilon
         return 0.0 / 0.0 #that's crazy
@@ -90,6 +113,8 @@ module MinimalMatch
       end
     end
 
+    # Returns the string representation of the pattern and any object
+    # used to create it
     def to_s
       @pattern.each_with_object("[") do |i,memo|
         unless [UNANCHORED_END, UNANCHORED_BEGIN].include? i then
@@ -98,18 +123,22 @@ module MinimalMatch
       end.chop.concat "]"
     end
 
+    # Returns a descriptive representation of the pattern and any objects
+    # used to created
     def inspect
       @pattern.reject do |i|
         [UNANCHORED_BEGIN, UNANCHORED_END].include? i
       end.inspect
     end
-
+    
+    # Compiled bytecodes for the pattern
     def compiled
       return @compiled if @compiled
       compile
       @compiled
     end
-
+    
+    # Compiles the pattern.  Returns true on success
     def compile
       is = [[:hold, 0]]
       @pattern.each do |mi|
@@ -123,7 +152,7 @@ module MinimalMatch
     end
 
     def pp
-      compiled.each_with_index { |e,i| puts "#{'%03d' % i} : #{e}" } 
+      compiled.each_with_index.inject("") { |memo,(e,i)| memo << "#{'%03d' % i} : #{e}\n"; memo } 
     end
   end
 
@@ -165,7 +194,6 @@ module MinimalMatch
       return false if @always_false
       debug.display_at 0,0
       @match_hash = {}
-      @match_hash_index = -1 
       @program_enum.next and @subject_enum.next
       res = catch :stop_now do
         process @program_enum, @subject_enum
@@ -177,7 +205,7 @@ module MinimalMatch
       end
       
       #because I don't want people setting this without REALLY TRYING HARD 
-      MinimalMatch.__send__ :instance_variable_set, :@last_match, @match_data
+      MinimalMatch.__send__ :instance_variable_set, :@last_match, @match_data.finalize
       res ? @match_data : false
     end
 
@@ -205,18 +233,16 @@ module MinimalMatch
            pattern_enum.next #advance enumerator, but not match
            next
          when :hold
-           @match_hash_index += 1
-           mhi = args.is_a?(Symbol) ? args : @match_hash_index #suport named captures
-           @match_hash[mhi] = { :begin => subject_enum.index }
+           @match_hash[args] = { :begin => subject_enum.index }
            pattern_enum.next
            next
          when :save
-           @match_hash[@match_hash_index][:end] = subject_enum.index - 1 #reports always one past end
-           @match_hash_index -= 1
+           @match_hash[args][:end] = subject_enum.index - 1 #reports always one past end
            pattern_enum.next
            next
          # not currently in use
          when :peek
+            ## not executed
            return false unless comp(subject_enum.peek, args)
            pattern_enum.next and subject_enum.next #advance both
          when :match

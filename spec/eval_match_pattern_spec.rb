@@ -28,6 +28,20 @@ describe "expression evaluation" do
     me.compile.should == [[:hold, 0], [:lit, 1], [:lit, 2], [:lit, 3], [:save, 0]]
   end
 
+  it "compile single length groups" do
+    me = m(2).bind
+    me.to_s.should == 'm(2).bind'
+    eval(me.to_s).inspect.should == m(2).bind.inspect
+    me.compile.should == [[:hold, 0], [:lit, 2], [:save, 0]]
+  end
+
+  it "compiles epsilon length groups" do
+    me = m(m(2)[2..4]).bind
+    me.to_s.should == 'm(m(2)[2..4]).bind'
+    eval(me.to_s).inspect.should == m(m(2)[2..4]).bind.inspect
+    me.compile.should == [[:hold, 0], [:lit, 2], [:lit, 2], [:split, 4, 5], [:lit, 2], [:noop], [:split, 7, 8], [:lit, 2], [:noop], [:save, 0]]
+  end
+
   it "compile nested group expression" do
     me = m(1,m(2,3))
     me.to_s.should == 'm(1,m(2,3))'
@@ -189,5 +203,11 @@ describe "expression evaluation" do
       eval(me.to_s).inspect.should == me.inspect
     end
   end
+
+  it "can compile marker objects" do
+    m(Begin,1,2,3).to_s = "m(Begin,1,2,3)"
+    m(3,2,1,End).to_s = "m(3,2,1,End)"
+  end
+
 end
 

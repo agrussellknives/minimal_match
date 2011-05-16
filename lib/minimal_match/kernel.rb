@@ -15,10 +15,6 @@ module Kernel
     MinimalMatch.m *args, &block
   end
 
-  def mg arg
-    MinimalMatch.mg arg
-  end
-
   def is_proxy? *args
     MinimalMatch::ProxyOperators.is_proxy? *args
   end

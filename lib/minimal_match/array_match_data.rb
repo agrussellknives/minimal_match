@@ -5,14 +5,20 @@ module MinimalMatch
     def initialize(array, pattern)
       @first_index = nil 
       @end_index = nil 
-      @array = array[0..-2].freeze #drop the sentinel
-      @pattern = pattern.dup.freeze
+      @array = array[0..-2]
+      @pattern = pattern
       @captures = {}
       @sub_match = {}
     end
 
+    def finalize
+      @array = @array.dup.freeze
+      @pattern = @pattern.dup.freeze
+      self
+    end
+
     def ==(mtch2)
-      mtch2.begin == @first_index && mtch2.end == @end_index && mtch2.pattern == @pattern && mtch.array == @array
+      mtch2.begin == self.begin && mtch2.end == self.end && mtch2.pattern.compiled == @pattern.compiled && mtch2.array == @array
     end
 
     def begin

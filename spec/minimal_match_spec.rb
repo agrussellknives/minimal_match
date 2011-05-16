@@ -17,7 +17,7 @@ describe "simple array matching" do
     end
 
     it "can deal with epsilon transitions" do
-      pattern = MinimalMatch::MatchPattern.new([!m(2)[2..4],End])
+      pattern = MinimalMatch::MatchPattern.new([!m(2)[2..4]])
       pattern.has_epsilon?.should == true
       pattern.length.nan?.should == true #infinity!
       ([2,2,2,2] =~ pattern).should == true
@@ -26,18 +26,81 @@ describe "simple array matching" do
       ([2,2,2] =~ pattern).should == true
     end
 
-    it "captures groups properly" do
-      pattern = [m(m(2)[2..4]).bind]
-      ([2,2,2,2] =~ pattern).should == true
+    it "groups multiple epsilons correctly" do
+      ([2,2,2,2] =~ m(m(2)[2..4]).bind).should == true
       MinimalMatch.last_match.captures.should == [[2,2,2,2],[2,2,2,2]]
-      
-      #non greedy
-      pattern = [m(!m(2)[2..4]).bind]
-      ([2,2,2,2] =~ pattern).should == true
+      ([2,2,2,2] =~ m(!m(2)[2..4]).bind).should == true
       MinimalMatch.last_match.captures.should == [[2,2,2,2],[2,2]]
+    end
+
+    it "patterns can be straight groups if you like" do
+      [2,2,2,2] =~ m(2).bind[2..4]
+      lm = MinimalMatch.last_match
+      [2,2,2,2] =~ m(2).bind[2..4]
+      lm.should == MinimalMatch.last_match
+      ([1,2,3,4] =~ [1,2,3,4]).should == true
+      fc = MinimalMatch.last_match.captures[0]
+      ([1,2,3,4] =~ m(1,2,3,4)).should == true
+      fc.should == MinimalMatch.last_match.captures[0]
     end
   end
 
+  describe "can manipulate patterns" do
+    it "can change nested pattern" do
+      pattern = MinimalMatch::MatchPattern.new(m(m(2)[2..4]).bind)
+      ([2,2,2,2] =~ pattern).should == true
+      lm = MinimalMatch.last_match
+      lm.captures.should == [[2,2,2,2],[2,2,2,2]]
+      pattern[0][0] = pattern[0][0].non_greedy
+      pattern.compile
+      ([2,2,2,2] =~ pattern).should == true
+      MinimalMatch.last_match.captures.should == [[2,2,2,2],[2,2]]
+    end
+
+    it "can change first level patterns" do
+      pattern = MinimalMatch::MatchPattern.new([1,2,3,4])
+      arr = [1,2,3,4]
+      (arr =~ pattern).should == true
+      pattern[0] = 2
+      (arr =~ pattern).should == false
+      arr[0] = 2
+      (arr =~ pattern).should == true
+    end
+ 
+  end
+
+  it "catches pathological patterns in the act" do
+    evil_pattern = [m(+m('x'),+m('x')),+m('y')]
+    innocent_input = ["x"] * 20
+    lambda do 
+      innocent_input =~ evil_pattern
+    end.should raise_error MinimalMatch::MatchMachine::PathologicalPatternError
+  end
+
+  describe "introspection" do
+    it "pattern can pretty print" do
+      pat = MinimalMatch::MatchPattern.new([1,2,3,4])
+      # includes all the accoutrement
+      pat.pp.should == <<-PP
+000 : [:hold, 0]
+001 : [:split, 4, 2]
+002 : [:lit, Anything]
+003 : [:jump, 1]
+004 : [:noop]
+005 : [:lit, 1]
+006 : [:lit, 2]
+007 : [:lit, 3]
+008 : [:lit, 4]
+009 : [:split, 10, 12]
+010 : [:lit, Anything]
+011 : [:jump, 9]
+012 : [:noop]
+013 : [:save, 0]
+014 : [:match]
+      PP
+    end
+  end
+        
   describe "matches anything" do
     it "simply" do
       ([1,2,3,4,5] =~ [Anything,2,3,4,5]).should == true
@@ -87,12 +150,73 @@ describe "simple array matching" do
     end
   end
 
+  describe "it matches greedy and non_greedy repitions" do
+    
+    it "can change between greedy and non_greedy" do
+      mp_g = m(2)[2..4] 
+      [2,2,2,2] =~ m(mp_g.non_greedy).bind
+      MinimalMatch.last_match.captures[1].should == [2,2]
+      mp_g = !m(2)[2..4] #nongreedy
+      [2,2,2,2] =~ m(mp_g.greedy).bind
+      MinimalMatch.last_match.captures[1].should == [2,2,2,2]
+    end
+
+    it "remembers the setting of the matchproxy" do
+      mp = m(2)
+      mp[2..4].to_s.should == "m(2)[2..4]"
+      mp.non_greedy
+      mp[2..4].to_s.should == "m(2)[2..4].non_greedy"
+    end
+
+    it "knows how to reverse itself" do
+      # use the named methods to make call order obvious
+      mp = m(2)
+      mp.kleene.to_s.should == "*(m(2))"
+      mp.kleene.non_greedy.to_s.should == "*(m(2)).non_greedy"
+      mp.kleene.non_greedy.greedy.to_s.should == "*(m(2))"
+      mp.quest.to_s.should == "~(m(2))"
+      mp.quest.non_greedy.to_s.should == "~(m(2)).non_greedy" 
+      mp.quest.non_greedy.greedy.to_s.should == "~(m(2))"
+      mp.plus.to_s.should == "+(m(2))"
+      mp.plus.non_greedy.to_s.should == "+(m(2)).non_greedy"
+      mp.plus.non_greedy.greedy.to_s.should == "+(m(2))"
+    end
+
+    it "switches back and forth with the ! operator" do
+      mp = m(2)
+      mp.kleene.to_s.should == "*(m(2))"
+      !mp
+      mp.greedy?.should == false
+      mp.kleene.to_s.should == "*(m(2)).non_greedy"
+      !mp
+      mp.greedy?.should == true
+      mp.kleene.to_s.should == "*(m(2))"
+    end
+
+    it "coerces between ranges and ints" do
+      mp = m(5).times 5
+      arr = [5] * 4
+      (arr =~ mp ).should == false
+      arr << 5
+      (arr =~ mp).should == true
+      arr << 5
+      (arr =~ mp).should == true #cause 5 < 6
+      mp = m(5).times 3..7
+      (arr =~ mp).should == true
+      mp = m(5) * 3
+      (arr =~ mp).should == true
+      mp = m(5) * (7..10)
+      (arr =~ mp).should == false
+      lambda { m(5) * 'frank' }.should raise_error ArgumentError
+    end
+
+  end
+
   it " matches things that might not be there" do
     ([1,2,3,4,5] =~ [1,2,~m(3),4,5]).should == true
     ([1,2,4,5] =~ [1,2,~m(3),4,5]).should == true
     ([1,[2,[4]]] =~ [1,[2,~m(3),[4]]]).should == true
   end
-
   
   it "specific number counts towards too long" do
     ([1,2,3] =~ [1,m(Anything)*3]).should == false
@@ -162,11 +286,17 @@ describe "simple array matching" do
     ([1,2,3,3,4,5,6,7] =~ [Begin,2,3,*m(Anything)]).should == false
     ([[1,2,3],4,5] =~ [Begin,Array,4,5]).should == true
     (['bob',2,3,4] =~ [Begin, m { |x| x == 'bob'}])
-
+  
   end
 
   it "can use anything which responds to ===" do
     ([1,"bob",[1,2]] =~ [Fixnum, String, Array]).should == true
+  end
+
+  it "can proxy anything respoding to === correctly" do
+    (["bob","frank","bill"] =~ m(String) * 3).should == true
+    (["MacArthur","MacLeod","MacLachlan","MacShawimamahimalingleberryknockadoodle"] =~ m(/Mac[A-Z][a-z]+/).bind * 3).should == true
+    MinimalMatch.last_match.captures[1..-1].should == ["MacArthur","MacLeod","MacLachlan"]
   end
 
   it "can match the end of an Array" do

@@ -91,15 +91,17 @@ module MinimalMatch
     def to_s
       str = "m("
       str << @comp_obj.collect do |i|
-        if is_group? i
+        if is_proxy? i and not is_group? i
+          i.comp_obj.to_s
+        elsif is_match_op? i
           i.to_s
         elsif i.comp_obj.is_a? ::Symbol #yeahhh
           ":#{i.comp_obj.to_s}"
-        else
-          i.comp_obj.to_s
         end
       end.join(',')
       str << ")"
+      str << ".bind" if @comp_obj.length == 1
+      str
     end
 
     # not sure if that's the best way to do this or not

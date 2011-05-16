@@ -12,6 +12,14 @@ module MinimalMatch
     end
     private :initialize
 
+    def greedy_class
+      self.class.greedy_class
+    end
+
+    def non_greedy_class
+      self.class.non_greedy_class
+    end
+
     attr_accessor :comp_obj
     def greedy?
       true
@@ -123,10 +131,6 @@ module MinimalMatch
       end
     end
 
-    def non_greedy_class
-      CountedRepetitionNonGreedy
-    end
-    
     def non_greedy
       non_greedy_class.new(@range, @comp_obj)
     end
@@ -138,7 +142,11 @@ module MinimalMatch
       self
     end
 
-    def _compile idx = nil
+    def compile_proc
+      @comp_obj.__send__ :count_class, ZeroOrOne
+    end
+
+    def _compile idx = nil, &block
       run = []
       # rewrite the subexpression to a number of literals
       # followed by a number of zero or ones
@@ -152,11 +160,7 @@ module MinimalMatch
       
       remaining = @range.end - @range.begin
       remaining.times do
-        subexpression << if greedy? then
-          ~(@comp_obj)
-        else
-          ~!(@comp_obj)
-        end
+        subexpression << compile_proc
       end
 
       subexpression.each_with_object [] do |mi,memo|
@@ -177,6 +181,21 @@ module MinimalMatch
   end
 
   class CountedRepetitionNonGreedy < CountedRepetition
+    class << self
+      def greedy_class
+        CountedRepetition
+      end
+    end
+
+    def compile_proc
+      @comp_obj.__send__ :count_class, ZeroOrOneNonGreedy
+    end
+    private :compile_proc
+
+    def greedy
+      greedy_class.new(@range,@comp_obj)
+    end
+
     def greedy?
       false
     end
@@ -207,7 +226,6 @@ module MinimalMatch
     
     def initialize comp_obj, arg
       super()
-      @is_match_op = true
       @alt_obj = arg
       @comp_obj = comp_obj
       @is_group = true
@@ -243,85 +261,89 @@ module MinimalMatch
 
   module MatchMultiplying
 
-  def * num
-    self[num..num]
-  end
-
-  def [] range
-    # coerce non ranges into single length range
-    unless range.is_a? Range then
-      r = range.to_i
-      raise TypeError, "could not convert #{range} into Range" unless r > 0
-      range = [r..r]
+    def [] range
+      # coerce non ranges into single length range
+      # this method does double duty as an index accessor for matchproxy groups
+      if range.is_a? Integer and is_group? self then
+        @comp_obj[range]
+      else
+        cl = @non_greedy ? CountedRepetition.non_greedy_class : CountedRepetition
+        cl.new range, self
+      end
     end
-    #this is where 2..8 would go
-    cl = @non_greedy ? CountedRepetition.non_greedy_class : CountedRepetition
-    @rep_obj = cl.new range, self
-  end
 
-  def times arg
-    if arg.is_a? Range then
-      self[arg]
-    elsif arg.is_a? Fixnum then
-      self[arg..arg]
-    else
-      raise 
+    def times arg
+      if arg.is_a? Range then
+        self[arg]
+      elsif arg.is_a? Fixnum then
+        self[arg..arg]
+      else
+        raise ArgumentError, "Expected Range or Fixnum, but got #{arg.class}"
+      end
     end
-  end
+    alias :* :times
     
-
-  # make the non-greedy modifier
-  # less particular about parentheses
-  def non_greedy
-    @non_greedy = true
-    self
-  end
-
-  #aliasing this doesn't work
-  def greedy
-    @non_greedy = false
-    self
-  end
-
-  def greedy?
-    !(@non_greedy)
-  end
-
-  def !
-    non_greedy
-  end
-
-  def +@
-    @one_or_more_obj ||= count_class(OneOrMore)
-    @one_or_more_obj_non_greedy ||= count_class(OneOrMoreNonGreedy)
-    @non_greedy ? @one_or_more_obj_non_greedy : @one_or_more_obj
-  end
-  alias :plus :+@
-
-  def ~@
-    @one_or_zero_obj ||= count_class(ZeroOrOne)
-    @one_or_zero_obj_non_greedy ||= count_class(ZeroOrOneNonGreedy) 
-    @non_greedy ? @one_or_zero_obj_non_greedy : @one_or_zero_obj
-  end
-  alias :quest :~@
-
-  def to_a
-    @zero_or_more_obj ||= count_class(ZeroOrMore)
-    @zero_or_more_obj_non_greedy ||= count_class(ZeroOrMoreNonGreedy)
-    [@non_greedy ? @zero_or_more_obj_non_greedy : @zero_or_more_obj] # has to actually return array
-  end
-
-  # This is the non array version of the KleeneStar operator (in to_a) 
-  # this enables you write some pretty pathological expressions which aren't
-  # currently caught, so use with care
-  def kleene 
-    to_a[0]
-  end
-
-  private
-    def count_class super_class
-      super_class.new(self)
+    # If called on a proxy which is is proxying a standard object,
+    # this sets the future "greediness" of operators on this object.
+    # If called on a proxy which is proxying an operator, it returns
+    # a new object with the specified greediness.
+    # This is non-recursive, so if called on a MatchProxyGroup which is
+    # proxying multiple operators, it will basically have no effect
+    # You can call that a bug if you like
+    def non_greedy
+      @non_greedy = true
+      self
     end
+
+    def greedy
+      @non_greedy = false
+      self
+    end
+
+    def greedy?
+      !(@non_greedy)
+    end
+
+    def !
+      if greedy?
+        self.non_greedy
+      else
+        self.greedy
+      end
+    end
+      
+
+    def +@
+      @one_or_more_obj ||= count_class(OneOrMore)
+      @one_or_more_obj_non_greedy ||= count_class(OneOrMoreNonGreedy)
+      @non_greedy ? @one_or_more_obj_non_greedy : @one_or_more_obj
+    end
+    alias :plus :+@
+
+    def ~@
+      @one_or_zero_obj ||= count_class(ZeroOrOne)
+      @one_or_zero_obj_non_greedy ||= count_class(ZeroOrOneNonGreedy) 
+      @non_greedy ? @one_or_zero_obj_non_greedy : @one_or_zero_obj
+    end
+    alias :quest :~@
+
+    def to_a
+      @zero_or_more_obj ||= count_class(ZeroOrMore)
+      @zero_or_more_obj_non_greedy ||= count_class(ZeroOrMoreNonGreedy)
+      [@non_greedy ? @zero_or_more_obj_non_greedy : @zero_or_more_obj] # has to actually return array
+    end
+
+    # This is the non array version of the KleeneStar operator (in to_a) 
+    # this enables you write some pretty pathological expressions which aren't
+    # currently caught, so use with care
+    def kleene 
+      to_a[0]
+    end
+
+    private
+      def count_class super_class
+        super_class.new(self)
+      end
   end
 
 
