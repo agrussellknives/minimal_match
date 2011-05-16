@@ -1,6 +1,6 @@
 require 'simplecov'
 
-if ENV["REPORT"] == 1 then
+if ENV["REPORT"] == "1" then
   require 'ruby-prof'
   require 'ruby-debug'
 

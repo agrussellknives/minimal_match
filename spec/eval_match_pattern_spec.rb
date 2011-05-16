@@ -4,12 +4,12 @@ require 'spec_helper'
 require 'minimal_match'
 require 'minimal_match/kernel'
 
+#print a compiled matcher
 def pc thing
-  thing.each_with_index.inject "" do |(e,i), memo|
-    memo << "#{'%0d' % i} : e\n"
+  thing.each_with_index.inject "" do |memo,(e,i)|
+    memo << "#{'%03d' % i}:#{e}\n"
     memo
   end
-  memo
 end
 
 describe "expression evaluation" do
@@ -65,7 +65,17 @@ describe "expression evaluation" do
       me = m(1)[1..3]
       me.to_s.should == 'm(1)[1..3]'
       eval(me.to_s).inspect.should == m(1)[1..3].inspect
-      me.compile.should == [[:lit, 1], [:split, 3, 4], [:lit, 1], [:noop], [:split, 6, 7], [:lit, 1], [:noop], [:split, 9, 10], [:lit, 1], [:noop], [:split, 12, 13], [:lit, 1], [:noop]] 
+      str = pc(me.compile)
+      str.should == <<-COMP
+000:[:lit, 1]
+001:[:split, 2, 3]
+002:[:lit, 1]
+003:[:noop]
+004:[:split, 5, 6]
+005:[:lit, 1]
+006:[:noop]
+      COMP
+
     end
 
     it "specific number shortcut" do
@@ -99,10 +109,19 @@ describe "expression evaluation" do
     end
 
     it "counted ranges non-greedy" do
-      me = m(1)[1..5].non_greedy
-      me.to_s.should == 'm(1)[1..5].non_greedy'
-      eval(me.to_s).inspect.should == m(1)[1..5].non_greedy.inspect
-      me.compile.should == [[:lit, 1], [:split, 4, 3], [:lit, 1], [:noop], [:split, 6, 7], [:lit, 1], [:noop], [:split, 10, 9], [:lit, 1], [:noop], [:split, 12, 13], [:lit, 1], [:noop]]
+      me = m(1)[1..3].non_greedy
+      me.to_s.should == 'm(1)[1..3].non_greedy'
+      eval(me.to_s).inspect.should == m(1)[1..3].non_greedy.inspect
+      str = pc(me.compile)
+      str.should == <<-COMP
+000:[:lit, 1]
+001:[:split, 3, 2]
+002:[:lit, 1]
+003:[:noop]
+004:[:split, 6, 5]
+005:[:lit, 1]
+006:[:noop]
+      COMP
     end
   end
       

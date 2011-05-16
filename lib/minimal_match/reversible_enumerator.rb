@@ -125,8 +125,10 @@ class ReversibleEnumerator
     if not @fiber.alive?
       @fiber = Fiber.new(&(method(:__block))) 
     end
-    @fiber.resume :reset # will raise FiberError if done across a thread
     @index = arg
+    @fiber.resume :reset # will raise FiberError if done across a thread
+    # this method will always return arg.  it's pretty much
+    # unavoidable.
   end
 
   def [] arg

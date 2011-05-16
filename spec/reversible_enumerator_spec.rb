@@ -56,8 +56,8 @@ describe "it's a reversible enumerator" do
     lambda { en.current }.should raise_error StopIteration
     en.next.should == 1
     en.rewind
-    en.prev #could actually be set to -2
-    lambda { en.instance_eval { @index }.should == -1 }.should raise_error StopIteration
+    #could actually be set to -2
+    lambda { en.prev }.should raise_error StopIteration
   end
 
   it "raises nomethod" do
@@ -258,7 +258,7 @@ describe "it's a reversible enumerator" do
   it "inspect works" do
     arr = @array.dup
     en = ReversibleEnumerator.new arr
-    en.inspect.should == "#<ReversibleEnumerator:0x660b34 [1, 2, 3, 4, 5]>"
+    en.inspect.should match /#<ReversibleEnumerator:0x([a-f0-9]){6,} \[1, 2, 3, 4, 5\]>/
   end
 
   it "won't let you touch it from another thread" do
