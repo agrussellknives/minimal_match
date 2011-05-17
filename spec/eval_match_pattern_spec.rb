@@ -205,8 +205,8 @@ describe "expression evaluation" do
   end
 
   it "can compile marker objects" do
-    m(Begin,1,2,3).to_s = "m(Begin,1,2,3)"
-    m(3,2,1,End).to_s = "m(3,2,1,End)"
+    m(Begin,1,2,3).to_s.should == "m(Begin,1,2,3)"
+    m(3,2,1,End).to_s.should == "m(3,2,1,End)"
   end
 
 end

@@ -91,7 +91,7 @@ module MinimalMatch
     def to_s
       str = "m("
       str << @comp_obj.collect do |i|
-        if is_proxy? i and not is_group? i
+        if is_proxy? i
           i.comp_obj.to_s
         elsif is_match_op? i
           i.to_s

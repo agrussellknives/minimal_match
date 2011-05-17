@@ -305,13 +305,13 @@ module MinimalMatch
     end
 
     def !
+      debugger
       if greedy?
         self.non_greedy
       else
         self.greedy
       end
     end
-      
 
     def +@
       @one_or_more_obj ||= count_class(OneOrMore)

@@ -95,6 +95,11 @@ module MinimalMatch
       "Begin"
     end
   end
+  class StopClass < MarkerObject
+    def to_s
+      "Stop"
+    end
+  end
 
   # you can't access the array "post" from ruby code
   # so you need this to know when you're at the end of
@@ -103,17 +108,13 @@ module MinimalMatch
     def === cmp
       cmp.equal? self 
     end
-    
-    def _compile idx
-      raise RuntimeError, "called compile on internal object. eep, mommy."
-    end
   end
  
   Anything = MinimalMatch::AnythingClass.instance
   End = MinimalMatch::EndClass.instance
   Begin = MinimalMatch::BeginClass.instance
+  Stop = MinimalMatch::StopClass.instance
   Sentinel = MinimalMatch::SentinelClass.instance
-
 
 end
 #  vim: set ts=2 sw=2 tw=0 :

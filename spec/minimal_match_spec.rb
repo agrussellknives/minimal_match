@@ -99,6 +99,36 @@ describe "simple array matching" do
 014 : [:match]
       PP
     end
+
+    it "minimalmatch heirarchy objects have some instrospection" do
+      # you might need this if you wind up writing additional operators
+      obj = m([1,2,3])
+      (obj.kind_of? MinimalMatchObject).should == true
+      (obj.kind_of? Alternation).should == true
+      (obj.kind_of? MatchMultiplying).should == true
+      (obj === MatchProxy).should == true
+      (MatchProxy === obj).should == true
+      # yep, anyof is a literal, because just doing "include? on the 
+      # array is about 1,000 times faster than any vm stuff I'm 
+      # going to write
+      obj.compile = [[:lit, MinimalMatch::AnyOf[1,2,3]]]
+    end
+
+    it "can get objects out of the proxy" do
+      p2 = m(2)
+      x = (p2 + 4)
+      x.should == 6
+      p2.to_obj.should == 2
+      am = [1,2,3,4].to_m
+      o = am.to_obj #dups
+      o << 5 
+      am.last.should == 4
+      o = am.comp_obj #does not
+      o << 6
+      am.last.should == 6
+    end
+
+
   end
         
   describe "matches anything" do
@@ -286,7 +316,16 @@ describe "simple array matching" do
     ([1,2,3,3,4,5,6,7] =~ [Begin,2,3,*m(Anything)]).should == false
     ([[1,2,3],4,5] =~ [Begin,Array,4,5]).should == true
     (['bob',2,3,4] =~ [Begin, m { |x| x == 'bob'}])
-  
+  end
+
+  it "can stop search as soon as the pattern matches" do
+    #by default, there is an implicit kleene star at the end of the 
+    #pattern. Appending a Stop literal to the end of the patter
+    #will mean that the pattern will not capture after that point.
+    ([1,2,3,4] =~ [1,2]).should == true
+    MinimalMatch.last_match.captures[0] = [1,2,3,4]
+    ([1,2,3,4] =~ [1,2,Stop]).should == true
+    MinimalMatch.last_match.captures[0] = [1,2]
   end
 
   it "can use anything which responds to ===" do
@@ -295,8 +334,8 @@ describe "simple array matching" do
 
   it "can proxy anything respoding to === correctly" do
     (["bob","frank","bill"] =~ m(String) * 3).should == true
-    (["MacArthur","MacLeod","MacLachlan","MacShawimamahimalingleberryknockadoodle"] =~ m(/Mac[A-Z][a-z]+/).bind * 3).should == true
-    MinimalMatch.last_match.captures[1..-1].should == ["MacArthur","MacLeod","MacLachlan"]
+    (["MacArthur","MacLeod","MacLachlan","MacShawimamahimalingleberryknockadoodle"] =~ [m(/Mac[A-Z][a-z]+/).bind * 3, Stop]).should == true
+    MinimalMatch.last_match.captures[1].should == [["MacArthur","MacLeod","MacLachlan"]]
   end
 
   it "can match the end of an Array" do

@@ -40,6 +40,7 @@ RSpec::Core::RakeTask.new(:spec) do |spec|
   spec.pattern = FileList['spec/**/*_spec.rb']
 end
 
+
 RSpec::Core::RakeTask.new(:spec_with_report) do |spec|
   spec.fail_on_error = false
   spec.skip_bundler = true

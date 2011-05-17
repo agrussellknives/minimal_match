@@ -17,7 +17,8 @@ describe "it's a reversible enumerator" do
     en2.prev.should == 3
     en.fast_foward
     en2 = en.dup
-    lambda { en.next }.should raise_error StopIteration
+    debugger
+    lambda { en2.next }.should raise_error StopIteration
   end
 
   it "knows when it's at the beginning or end" do

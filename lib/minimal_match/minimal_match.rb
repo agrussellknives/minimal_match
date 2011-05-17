@@ -51,6 +51,9 @@ module MinimalMatch
           when EndClass
             pattern = pattern[0 .. pattern.index(val)]
             @has_end = true
+          when StopClass
+            pattern = pattern[0 .. patern.index(val)-1]
+            @has_end = true
           when BeginClass
             pattern = pattern[pattern.index(val).succ .. -1]
             @has_begin = true
@@ -205,6 +208,7 @@ module MinimalMatch
       end
       
       #because I don't want people setting this without REALLY TRYING HARD 
+      #i should probabyl wrap this in a sync or something for thread safety
       MinimalMatch.__send__ :instance_variable_set, :@last_match, @match_data.finalize
       res ? @match_data : false
     end

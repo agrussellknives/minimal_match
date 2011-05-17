@@ -1,3 +1,5 @@
+require 'sender'
+
 module MinimalMatch
   # module which provdes the compile method
   # in order to return custom bytecodes for itself
@@ -56,14 +58,15 @@ module MinimalMatch
   
   # provides introspect capabilities for matchobject heirarcy
   class MinimalMatchObject < BasicObject
+    #undef remaining methods to so they get passed on to the subject 
+    #undef_method :!, :!=
+
     include ::Kernel
     include ::MinimalMatch::ProxyOperators
     include ::MinimalMatch::ToProxy
     include ::MinimalMatch::MatchCompile
-    include ::MinimalMatch::Debugging
-
+   
     # Abstract
-    #
     def class
       class << self
         self.superclass
@@ -99,9 +102,19 @@ module MinimalMatch
       @klass == klass
     end
 
-    # these are not just aliased, because we undef
-    # to_s in the proxy classes, but not inspect
-    def to_s; end
+    def == val
+      $stdout.puts "hi, i was compared to #{val}"
+      false
+    end
+
+    def !
+      $stdout.puts "hi i was falsed from #{__caller__}"
+      false
+    end
+
+    def != val
+      $stdout.puts "sure, wasn't equal to #{val}"
+    end
 
     def inspect
       @klass.to_s
@@ -117,9 +130,8 @@ module MinimalMatch
   class AbstractMatchProxy < MinimalMatchObject
     attr_accessor :comp_obj
 
-    # undef MOST of the introspection capabilities to pass them
-    # on to the subject
-    undef_method :to_s, :respond_to?, :is_a?, :class rescue nil
+    #undef our heirarchy's introspection stuff
+    undef_method :to_s, :respond_to?, :is_a?, :class
 
     def initialize klass = nil
       super(klass)
@@ -131,7 +143,12 @@ module MinimalMatch
     end
 
     def to_obj
-      @comp_obj 
+      begin
+        @comp_obj.dup
+      rescue TypeError => e
+        return @comp_obj if e.message =~ /can't dup/
+        raise e
+      end
     end
 
     def === val
@@ -141,11 +158,11 @@ module MinimalMatch
     end
 
     def respond_to_missing? meth, *args
-      raise "How did you instantiate this object? This is an abstract."
+      raise "Method #{meth} looked for in abstract class."
     end
 
     def method_missing meth, *args
-      raise "How did you instantiate this object? This is an abstract."
+      raise "Method #{meth} called in abstract class."
     end
 
     def _compile(idx = 0) #support nested single proxies
@@ -156,7 +173,7 @@ module MinimalMatch
         [:lit, @comp_obj]
       end
     end
-    
+        
     private :initialize
   end
 end 
