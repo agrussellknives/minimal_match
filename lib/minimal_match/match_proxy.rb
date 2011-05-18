@@ -24,14 +24,7 @@ module MinimalMatch
     end
 
     def to_s
-      if @comp_obj.kind_of? AnyOf and @comp_obj.negated?
-        s = @comp_obj.to_s 
-        s = s.split('.')
-        s = "m(#{s[0]}).#{s[1]}"
-      else
-        s = "m(#{@comp_obj.to_s})"
-      end
-      s
+      s = "m(#{@comp_obj.to_s})"
     end
 
     def bind name = nil
@@ -45,11 +38,6 @@ module MinimalMatch
     
     def inspect
       "<#{@comp_obj.inspect} : MatchProxy>"
-    end
-
-    def coerce arg
-      arg_equiv = is_proxy?(arg) ? arg.comp_obj : arg
-      return self, arg_equiv
     end
 
     def method_missing meth, *args
@@ -91,7 +79,7 @@ module MinimalMatch
     def to_s
       str = "m("
       str << @comp_obj.collect do |i|
-        if is_proxy? i
+        if is_proxy? i and not is_group? i
           i.comp_obj.to_s
         elsif is_match_op? i
           i.to_s
@@ -121,7 +109,7 @@ module MinimalMatch
     def respond_to_missing? meth, *args
       puts "respond to missing from match proxy group"
     end
-    
+   
     # i don't know if this is really the correct way to do this or not....
     def method_missing meth, *args
       res = @comp_obj.__send__ meth, *args

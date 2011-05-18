@@ -111,15 +111,11 @@ module MinimalMatch
     self.const_set class_name, greedy
     self.const_set class_name.to_s + "NonGreedy", non_greedy
   end
-  
 
-  
-  
   # not generated because the syntax is a little
   # different and it take an additional argument
   # i suppose you could make all of the count
-  # operators subclasses of counted repetition 
-  # if you were feeling ambitious
+
   class CountedRepetition < Repetition
 
     attr_reader :range
@@ -137,6 +133,7 @@ module MinimalMatch
     alias :! :non_greedy
       
     def initialize range, comp_obj, &block
+      range = (range .. range) unless range.is_a? ::Range 
       super(comp_obj, &block)
       @range = range
       self
@@ -212,7 +209,7 @@ module MinimalMatch
   module Alternate
     def | arg
       unless is_proxy? arg
-        self_equiv, arg_equiv = self.coerce(arg) 
+        self_equiv, arg_equiv = self, arg.to_m
       else
         self_equiv, arg_equiv = self, arg
       end
@@ -240,26 +237,52 @@ module MinimalMatch
       "#{@comp_obj.to_s}|#{@alt_obj.to_s}"
     end
 
-    def _compile idx = nil
-      run = []
-      br_1idx = idx + 1
-      brch_1 = @comp_obj.compile(br_1idx) 
-      #brch_1 = [brch_1] unless is_group? @comp_obj
-
-      br_2idx = brch_1.length + 2
-      brch_2 = @alt_obj.compile(br_2idx) 
-      #brch_2 = [brch_2] unless is_group? @comp_obj
-
-      run << [:split, idx + 1, idx+brch_1.length+2] #plus jump and split instructions
-      run << brch_1
-      run << [:jump, idx + brch_1.length + 1 + brch_2.length + 1] #end of the alternation
-      run << brch_2
-      run << [:noop]
-      run
+    def _compile idx = 0 
+      subexpression = []
+      co = self
+      branch_1 = nil
+      while co
+        begin
+          subexpression << co.alt_obj
+          co = co.comp_obj
+        rescue ::NoMethodError => e
+          raise unless e.name == :alt_obj
+          subexpression << co
+          branch_1 = co
+          break
+        end
+      end
+      debugger
+      #subexpression is in reverse order
+      res = subexpression.reverse.each_with_object [] do |mi,memo|
+        i = memo.length + idx
+        sub = mi.compile(i+1)
+        memo << [:split, i, i+sub.length]
+        memo.concat sub
+        if branch_1.equal? mi #since we reversed it
+          memo << [:noop]
+        else
+          memo << [:jump, :end]
+        end
+      end
+      res.collect do |mi|
+        mi == [:jump,:end] ? [:jump, idx + res.length] : mi
+      end
     end
   end
 
   module MatchMultiplying
+    module SwitchMultiply
+      def * arg 
+        self.pass(:*,arg)
+      end
+    end
+
+    def coerce arg
+      self_equiv = self.dup
+      self_equiv.extend(SwitchMultiply)
+      [self_equiv, arg]
+    end
 
     def [] range
       # coerce non ranges into single length range
@@ -305,7 +328,6 @@ module MinimalMatch
     end
 
     def !
-      debugger
       if greedy?
         self.non_greedy
       else

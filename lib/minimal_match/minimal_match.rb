@@ -52,7 +52,7 @@ module MinimalMatch
             pattern = pattern[0 .. pattern.index(val)]
             @has_end = true
           when StopClass
-            pattern = pattern[0 .. patern.index(val)-1]
+            pattern = pattern[0 .. pattern.index(val)-1]
             @has_end = true
           when BeginClass
             pattern = pattern[pattern.index(val).succ .. -1]

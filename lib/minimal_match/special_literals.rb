@@ -1,6 +1,12 @@
 module MinimalMatch
   #special literals
-  class AnyOf < MinimalMatchObject
+  class AnyOf < MinimalMatchObject 
+    class << self
+      def [] *args
+        AnyOf.new(*args)
+      end
+    end
+
     def initialize(*args)
       super()
       @match_array = []
@@ -13,7 +19,6 @@ module MinimalMatch
         i.to_s
       end.join(",")
       str << "]"
-      str = "m(#{str}).not" if @negated
       str
     end
     
@@ -21,9 +26,8 @@ module MinimalMatch
       str = self.class.to_s.split('::')
       str[-1] =str[-1].insert(0,"Not") if @negated
       str = str.join('::')
-      "#{str}:#{@match_array.to_s}"
+      "#{str}#{@match_array.to_s}"
     end
-    
 
     def === obj
       ret = @negated ? false : true

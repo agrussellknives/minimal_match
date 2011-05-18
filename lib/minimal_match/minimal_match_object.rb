@@ -1,5 +1,3 @@
-require 'sender'
-
 module MinimalMatch
   # module which provdes the compile method
   # in order to return custom bytecodes for itself
@@ -59,8 +57,6 @@ module MinimalMatch
   # provides introspect capabilities for matchobject heirarcy
   class MinimalMatchObject < BasicObject
     #undef remaining methods to so they get passed on to the subject 
-    #undef_method :!, :!=
-
     include ::Kernel
     include ::MinimalMatch::ProxyOperators
     include ::MinimalMatch::ToProxy
@@ -87,6 +83,7 @@ module MinimalMatch
 
     def kind_of? klass
       return true if @ancestry.include? klass
+      debugger
       if (icm = @klass.included_modules) # yes, that's supposed ot be an assignment
         return true if icm.include? klass
       end
@@ -102,24 +99,27 @@ module MinimalMatch
       @klass == klass
     end
 
-    def == val
-      $stdout.puts "hi, i was compared to #{val}"
-      false
-    end
-
-    def !
-      $stdout.puts "hi i was falsed from #{__caller__}"
-      false
-    end
-
-    def != val
-      $stdout.puts "sure, wasn't equal to #{val}"
-    end
-
-    def inspect
+    def inspect 
       @klass.to_s
     end
 
+    def == other
+      self.compile == other.compile
+    end
+    
+    #rspec expects there to ba pretty print method,
+    #but the stdlib one doesn't work on anything
+    #not descended from Object, here is a simple implementation
+    # it prints the compiled version of the object
+    def pretty_print q
+      compiled = self.compile
+      compiled.each_with_index do |c,i|
+        q.breakable
+        q.text "#{'%03d' % i}: #{c}"
+      end
+      q
+    end 
+    
     def _compile(*)  #who cares
       [:lit, self]
     end
@@ -131,7 +131,7 @@ module MinimalMatch
     attr_accessor :comp_obj
 
     #undef our heirarchy's introspection stuff
-    undef_method :to_s, :respond_to?, :is_a?, :class
+    undef_method :to_s, :respond_to?, :is_a?, :class, :==, :!=
 
     def initialize klass = nil
       super(klass)
@@ -145,7 +145,7 @@ module MinimalMatch
     def to_obj
       begin
         @comp_obj.dup
-      rescue TypeError => e
+      rescue ::TypeError => e
         return @comp_obj if e.message =~ /can't dup/
         raise e
       end
@@ -161,6 +161,16 @@ module MinimalMatch
       raise "Method #{meth} looked for in abstract class."
     end
 
+    def pass meth, *args
+      method_missing meth, *args
+    end
+
+    def coerce arg
+      arg_equiv = is_proxy?(arg) ? arg.comp_obj : arg
+      self_equiv, arg_equiv = super
+      return self_equiv, arg_equiv
+    end
+
     def method_missing meth, *args
       raise "Method #{meth} called in abstract class."
     end
@@ -168,7 +178,7 @@ module MinimalMatch
     def _compile(idx = 0) #support nested single proxies
       # no method error will be caught by "compile"
       if is_proxy? @comp_obj or is_match_op? @comp_obj
-        @comp_obj._compile(idx+1) # so, like not including myself natch
+        @comp_obj._compile(idx) # so, like not including myself natch
       else
         [:lit, @comp_obj]
       end

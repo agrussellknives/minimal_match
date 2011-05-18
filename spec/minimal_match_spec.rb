@@ -103,15 +103,18 @@ describe "simple array matching" do
     it "minimalmatch heirarchy objects have some instrospection" do
       # you might need this if you wind up writing additional operators
       obj = m([1,2,3])
-      (obj.kind_of? MinimalMatchObject).should == true
-      (obj.kind_of? Alternation).should == true
-      (obj.kind_of? MatchMultiplying).should == true
-      (obj === MatchProxy).should == true
-      (MatchProxy === obj).should == true
+      (obj.kind_of? MinimalMatch::MinimalMatchObject).should == true
+      (is_proxy? obj).should == true
+      (is_match_op? obj).should == true
       # yep, anyof is a literal, because just doing "include? on the 
       # array is about 1,000 times faster than any vm stuff I'm 
       # going to write
-      obj.compile = [[:lit, MinimalMatch::AnyOf[1,2,3]]]
+      obj.compile.should == [[:lit, MinimalMatch::AnyOf[1,2,3]]]
+    end
+
+    it "should be able to proxy a class object" do
+      obj = m(String)
+      (obj === "hello").should == true
     end
 
     it "can get objects out of the proxy" do
@@ -127,8 +130,43 @@ describe "simple array matching" do
       o << 6
       am.last.should == 6
     end
+      
+      it "proxying an proxy does not double proxy" do
+        me = m(1)
+        me.class.should == Fixnum
+        me2 = m(me)
+        me.class.should == Fixnum
+        me.to_obj.should == me2.to_obj
+      end
 
+      it "handles nil / false proxies and results of proxies" do
+        me = m(nil)
+        me.nil?.should == true
+        (me and 1).should == 1 #sorry.
+        (me.to_obj and 1).should == nil
+        m2 = m(3)
+        res = (2 <=> m2)
+        res.should == -1
+        (is_proxy? res).should == true
+        res = (2 < m2)
+        res.should == false
+        (is_proxy? res).should == false
+      end
 
+      it "properly coerces proxies for commutative operators" do
+        # are there more commutative operators?
+        me = m(5)
+        x = (me + 5)
+        (x).should == (5 + me)
+        (is_proxy? x).should be true
+        x.should == 10
+        y = (me * 5)
+        (y).should == (5 * me)
+        (is_proxy? y).should be true
+        y.should == 25
+        (3 - me).should == -2
+        (me - 3).should == 2
+      end
   end
         
   describe "matches anything" do
@@ -268,7 +306,7 @@ describe "simple array matching" do
 
   it "does something useful with inspect" do
     x = [1,m([2,3,4]),5]
-    x.inspect.should == "[1, <MinimalMatch::AnyOf:[2, 3, 4] : MatchProxy>, 5]"
+    x.inspect.should == "[1, <MinimalMatch::AnyOf[2, 3, 4] : MatchProxy>, 5]"
   end 
 
   it "can use arbitrary procs for matchin the items" do
@@ -335,7 +373,7 @@ describe "simple array matching" do
   it "can proxy anything respoding to === correctly" do
     (["bob","frank","bill"] =~ m(String) * 3).should == true
     (["MacArthur","MacLeod","MacLachlan","MacShawimamahimalingleberryknockadoodle"] =~ [m(/Mac[A-Z][a-z]+/).bind * 3, Stop]).should == true
-    MinimalMatch.last_match.captures[1].should == [["MacArthur","MacLeod","MacLachlan"]]
+    MinimalMatch.last_match.captures[0].should == ["MacArthur","MacLeod","MacLachlan"]
   end
 
   it "can match the end of an Array" do
@@ -394,4 +432,3 @@ describe "simple array matching" do
     end
   end
 end
-   

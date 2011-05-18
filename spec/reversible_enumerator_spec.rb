@@ -17,7 +17,6 @@ describe "it's a reversible enumerator" do
     en2.prev.should == 3
     en.fast_foward
     en2 = en.dup
-    debugger
     lambda { en2.next }.should raise_error StopIteration
   end
 

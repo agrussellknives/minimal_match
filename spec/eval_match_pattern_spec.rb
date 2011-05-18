@@ -209,5 +209,19 @@ describe "expression evaluation" do
     m(3,2,1,End).to_s.should == "m(3,2,1,End)"
   end
 
+  describe "should compile character classes" do
+    it "which are positive" do
+      me = m([1,2,3])
+      me.to_s.should == 'm([1,2,3])'
+      eval(me.to_s).inspect.should == m([1,2,3]).inspect
+      me.compile.to_s.should == [[:lit,MinimalMatch::AnyOf[1,2,3]]].to_s
+    end
+    it "which are negated" do
+      me = m([1,2,3]).not
+      me.to_s.should == 'm([1,2,3).not'
+      eval(me.to_s).inspect.should == m([1,2,3]).not.inspect
+      me.compile.to_s.should == [[:lit,MinimalMatch::NotAnyOf[1,2,3]]].to_s
+    end
+  end
 end
 

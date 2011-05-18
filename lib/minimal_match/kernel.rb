@@ -30,5 +30,6 @@ module Kernel
   Anything = MinimalMatch::Anything
   Begin = MinimalMatch::Begin
   End = MinimalMatch::End
+  Stop = MinimalMatch::Stop
 end
 
