@@ -251,14 +251,14 @@ module MinimalMatch
       end
       #subexpression is in reverse order
       res = subexpression.reverse.each_with_object [] do |mi,memo|
-        i = memo.length + idx
+        i = memo.length + idx + 1
         sub = mi.compile(i+1)
         memo << [:split, i, i+sub.length]
         memo.concat sub
         if mi.equal? subexpression.first #since we reversed it
-          memo << [:noop]
-        else
           memo << [:jump, :end]
+        else
+          memo << [:noop]
         end
       end
       res.collect do |mi|
