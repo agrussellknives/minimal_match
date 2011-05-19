@@ -225,7 +225,6 @@ module MinimalMatch
       super()
       @alt_obj = arg
       @comp_obj = comp_obj
-      @is_group = true
     end
 
     # because it takes up more than single instruction
@@ -240,7 +239,6 @@ module MinimalMatch
     def _compile idx = 0 
       subexpression = []
       co = self
-      branch_1 = nil
       while co
         begin
           subexpression << co.alt_obj
@@ -248,25 +246,23 @@ module MinimalMatch
         rescue ::NoMethodError => e
           raise unless e.name == :alt_obj
           subexpression << co
-          branch_1 = co
           break
         end
       end
-      debugger
       #subexpression is in reverse order
       res = subexpression.reverse.each_with_object [] do |mi,memo|
         i = memo.length + idx
         sub = mi.compile(i+1)
         memo << [:split, i, i+sub.length]
         memo.concat sub
-        if branch_1.equal? mi #since we reversed it
+        if mi.equal? subexpression.first #since we reversed it
           memo << [:noop]
         else
           memo << [:jump, :end]
         end
       end
       res.collect do |mi|
-        mi == [:jump,:end] ? [:jump, idx + res.length] : mi
+        mi == [:jump,:end] ? [:jump, idx + res.length - 2] : mi
       end
     end
   end

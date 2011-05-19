@@ -178,7 +178,7 @@ module MinimalMatch
     def _compile(idx = 0) #support nested single proxies
       # no method error will be caught by "compile"
       if is_proxy? @comp_obj or is_match_op? @comp_obj
-        @comp_obj._compile(idx) # so, like not including myself natch
+        @comp_obj._compile(idx+1) # so, like not including myself natch
       else
         [:lit, @comp_obj]
       end
