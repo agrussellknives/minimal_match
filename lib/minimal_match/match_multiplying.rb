@@ -164,7 +164,7 @@ module MinimalMatch
         i = memo.length + idx
         # this is sort of recursive, but it
         # normalizes the bytecode this way
-        memo.concat(MatchCompile.compile(i,mi))
+        memo.concat(mi.compile(i))
       end
     end
 
@@ -250,12 +250,12 @@ module MinimalMatch
         end
       end
       #subexpression is in reverse order
-      res = subexpression.reverse.each_with_object [] do |mi,memo|
+      compiled_subex = subexpression.reverse.each_with_object [] do |mi,memo|
         i = memo.length + idx + 1
         sub = mi.compile(i+1)
         memo << [:split, i, i+sub.length]
         memo.concat sub
-        if mi.equal? subexpression.first #since we reversed it
+        if mi.equal? subexpression.last #since we reversed it
           memo << [:jump, :end]
         else
           memo << [:noop]

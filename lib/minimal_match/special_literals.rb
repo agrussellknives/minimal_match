@@ -37,6 +37,11 @@ module MinimalMatch
       !(ret)
     end
 
+    def == obj
+      ot_arr = obj.instance_eval { @match_array }
+      (@match_array == ot_arr and obj.negated? == @negated) ? true : false
+    end 
+
     def negated?
       @negated
     end
