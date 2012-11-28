@@ -1,9 +1,8 @@
 require 'simplecov'
+require 'ruby-prof'
 
 if ENV["REPORT"] == "1" then
-  require 'ruby-prof'
-  require 'ruby-debug'
-
+  
   SimpleCov.start do
     add_filter "spec.rb"
     coverage_dir "report/coverage"

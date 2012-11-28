@@ -1,6 +1,5 @@
 require 'spec_helper'
 
-
 require 'minimal_match'
 require 'minimal_match/kernel'
 

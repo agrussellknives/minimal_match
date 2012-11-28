@@ -8,7 +8,7 @@ class ReversibleEnumerator
 
   attr_reader :obj, :index
 
-  #TODAY, make it handle strings, etc. anything that responds to arbitrary indexing
+  #TODO, make it handle strings, etc. anything that responds to arbitrary indexing
 
   def initialize obj, no_duplicate = false
     raise ArgumentError,"Object must be enumerable" if not obj.kind_of? Enumerable

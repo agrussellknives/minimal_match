@@ -109,7 +109,6 @@ describe "simple array matching" do
       # yep, anyof is a literal, because just doing "include? on the 
       # array is about 1,000 times faster than any vm stuff I'm 
       # going to write
-      debugger
       obj.compile.should == [[:lit, MinimalMatch::AnyOf[1,2,3]]]
     end
 

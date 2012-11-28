@@ -83,7 +83,6 @@ module MinimalMatch
 
     def kind_of? klass
       return true if @ancestry.include? klass
-      debugger
       if (icm = @klass.included_modules) # yes, that's supposed ot be an assignment
         return true if icm.include? klass
       end
